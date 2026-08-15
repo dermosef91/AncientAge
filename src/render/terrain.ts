@@ -11,6 +11,8 @@ import { C } from './palette';
 import { mixHex } from './geo';
 import { clamp, smoothstep } from '../core/math';
 
+import type { Biome } from '../sim/mapgen';
+
 export interface TerrainBuild {
   ground: Mesh;
   water: Mesh;
@@ -26,6 +28,27 @@ const TERRAIN_COLOR: Record<number, number> = {
   [T_GRASS]: C.grass,
   [T_DRY]: C.grassDry,
   [T_ROCK]: C.cliff,
+};
+
+/**
+ * Ground colours per homeland. Egypt bleaches towards desert, Greece keeps the
+ * warm Mediterranean base, Rome greens up. Only the land entries change — the
+ * sea is the same sea whoever is fighting over it.
+ */
+const BIOME_GROUND: Record<Biome, Partial<Record<number, number>>> = {
+  egypt: {
+    [T_SAND]: 0xe6cf9c,
+    [T_GRASS]: 0xa9a862,
+    [T_DRY]: 0xd8c084,
+    [T_ROCK]: 0xc2ab8b,
+  },
+  greece: {},
+  rome: {
+    [T_SAND]: 0xd6c9a2,
+    [T_GRASS]: 0x76914a,
+    [T_DRY]: 0xa8ac66,
+    [T_ROCK]: 0x9c9689,
+  },
 };
 
 /** Cheap hash noise for per-vertex colour variation. */
@@ -62,7 +85,11 @@ function distToSeg(px: number, pz: number, ax: number, az: number, bx: number, b
   return Math.hypot(px - cx, pz - cz);
 }
 
-export function buildTerrain(grid: Grid, paths: Polyline[]): TerrainBuild {
+export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'greece'): TerrainBuild {
+  const groundColor = { ...TERRAIN_COLOR, ...BIOME_GROUND[biome] };
+  // The mottling and dry-patch tints follow the ground they sit on.
+  const mottleLight = biome === 'rome' ? C.grassDry : C.sandLight;
+  const mottleDark = biome === 'rome' ? C.grassDark : C.sandDark;
   const n = GRID_SIZE + 1;
   const positions = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
@@ -104,7 +131,7 @@ export function buildTerrain(grid: Grid, paths: Polyline[]): TerrainBuild {
         const gx = clamp(cx + dx, 0, GRID_SIZE - 1);
         const gz = clamp(cz + dz, 0, GRID_SIZE - 1);
         const t = grid.terrain[grid.idx(gx, gz)];
-        const c = TERRAIN_COLOR[t] ?? C.sand;
+        const c = groundColor[t] ?? C.sand;
         r += (c >> 16) & 255;
         g += (c >> 8) & 255;
         b += c & 255;
@@ -120,7 +147,7 @@ export function buildTerrain(grid: Grid, paths: Polyline[]): TerrainBuild {
 
     // Mottling.
     const noise = smoothHash(cx * 0.22, cz * 0.22) * 0.5 + smoothHash(cx * 0.9, cz * 0.9) * 0.5;
-    hex = mixHex(hex, noise > 0.5 ? C.sandLight : C.sandDark, (noise - 0.5) * 0.34 + 0.09);
+    hex = mixHex(hex, noise > 0.5 ? mottleLight : mottleDark, (noise - 0.5) * 0.34 + 0.09);
 
     // Dry grass patches on the greens.
     if (h > 0.1 && rockish === 0) {

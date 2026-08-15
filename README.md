@@ -33,20 +33,44 @@ Any other static host works the same way — build with `npm run build` and serv
 
 ## Playing
 
+Touch keeps the one-finger scheme; a mouse and keyboard get the Age of Empires
+conventions instead. Both are live at once, so a hybrid laptop behaves sensibly
+whichever you reach for.
+
 | | Touch | Mouse / keyboard |
 |---|---|---|
-| Look around | drag | right-drag, or `WASD` / arrow keys |
-| Zoom | pinch | scroll wheel, or `Q` / `E` |
-| Select | tap a unit or building | click, or left-drag a selection box |
-| Select all of a type | double-tap a unit | double-click |
-| Move / attack | tap the ground or an enemy | click the ground or an enemy |
-| Gather | tap a tree, bush, mine or shoal with villagers selected | same |
-| Build | **Build** → pick a building → drag the ghost → release on valid ground | same, `Esc` cancels |
+| Look around | drag | screen edge, arrow keys, or middle-drag |
+| Zoom | pinch | scroll wheel, or `+` / `-` |
+| Select | tap a unit or building | left-click, or left-drag a box |
+| Add to selection | — | `Shift` + left-click |
+| Select all of a type | double-tap a unit | double-click (everything on screen) |
+| Move / attack / gather | tap the ground, an enemy or a resource | **right-click** the same |
+| Build | **Build** → pick a building → drag the ghost → release | `B`, pick, left-click to place, right-click to cancel |
 | Menu | ☰ | `Esc` |
 | Centre on base | 🏠 button | `Space` |
 
+### Keyboard
+
+| Key | |
+|---|---|
+| `Q` `W` `E` `R` `T` | top row of whichever panel is open |
+| `A` `S` `D` `F` `G` | second row of that panel — the build menu's category tabs |
+| `Shift` + `1`…`0` | assign a control group (`Ctrl` also works where the browser allows it) |
+| `1`…`0` | select that group; press twice to jump to it |
+| `H` | select your town centre |
+| `B` | build menu |
+| `.` / `,` | next / previous idle villager |
+| `Delete` | delete the selected units |
+| `F1` or `?` | the full controls reference |
+
+The grid hotkeys follow the panel: with the town centre selected `Q` trains a villager,
+and with the build menu open `Q` picks the first building on the open tab while `S`
+switches to Military. Every button carries its letter, so the key under a button is
+always the one that presses it.
+
 The right-hand rail selects your whole army, cycles idle villagers, recentres on the
-town centre and mutes sound. The minimap accepts taps and drags to jump the camera.
+town centre and mutes sound. Left-click or drag the minimap to move the camera;
+right-click it to send the selection there.
 
 `?seed=12345` replays a specific map, `?enemy=rome` forces the opponent's
 civilisation, and `?fps=1` shows a frame counter.

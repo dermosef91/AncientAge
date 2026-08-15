@@ -1,5 +1,6 @@
 import { FACTIONS, TECHS } from '../sim/data';
 import type { FactionId, Player, TechId } from '../sim/types';
+import { FACTION_PLURAL, factionCrest, factionScene } from './factionArt';
 import { icon } from './icons';
 
 const FACTION_ORDER: FactionId[] = ['egypt', 'greece', 'rome'];
@@ -65,28 +66,48 @@ export class Screens {
   private titleTemplate(): string {
     const cards = FACTION_ORDER.map((id) => {
       const f = FACTIONS[id];
+      // The bonus prose is one or two sentences; each becomes its own line, and
+      // the elite unit always closes the list.
+      const perks = f.bonusText
+        .split('. ')
+        .map((t) => t.trim().replace(/\.$/, ''))
+        .filter(Boolean)
+        .map((t) => ({ ico: 'research', text: `${t}.` }));
+      perks.unshift({ ico: 'flag', text: `<b>${f.bonusName}</b>` });
+      perks.push({ ico: f.elite, text: f.eliteText.replace(' - ', ' — ') });
+
       return `<button class="fcard ${id === this.selected ? 'selected' : ''}" data-f="${id}" style="--fc:${FACTION_ACCENT[id]}">
-        <span class="tag">${f.adjective}</span>
-        <h3>${f.name}</h3>
-        <div class="row">${icon('flag')}<span><b>${f.bonusName}.</b> ${f.bonusText}</span></div>
-        <div class="row">${icon(f.elite)}<span>${f.eliteText}</span></div>
+        <span class="fcard-head">${factionCrest(id)}<h3>${FACTION_PLURAL[id]}</h3></span>
+        <span class="fart">
+          <span class="fart-clip">${factionScene(id)}</span>
+          <span class="fcrest">${factionCrest(id)}</span>
+        </span>
+        <span class="fperks">
+          ${perks
+            .map((p) => `<span class="fperk"><span class="fperk-ico">${icon(p.ico)}</span><span>${p.text}</span></span>`)
+            .join('')}
+        </span>
       </button>`;
     }).join('');
 
-    return `<div class="screen-inner">
+    return `<div class="screen-inner title-screen">
       <div class="title-block">
-        <div class="kicker">Skirmish · 1v1</div>
+        <div class="kicker"><i></i><span>Skirmish · 1v1</span><i></i></div>
         <h1>ANCIENT AGE</h1>
-        <p>Gather, build, and raze the enemy town centre. Choose your civilisation.</p>
+        <div class="rule"><i></i><b>◆</b><i></i></div>
+        <p>Choose your civilisation and begin your conquest.</p>
       </div>
       <div class="faction-grid">${cards}</div>
       <div class="btn-row">
-        <button class="big-btn" data-act="start">${icon('age')}<span>Begin Skirmish</span></button>
+        <button class="big-btn ornate" data-act="start"><span class="star">★</span><span>Begin Skirmish</span></button>
       </div>
-      <p class="end-sub" style="max-width:640px">
-        Drag to pan · pinch to zoom · tap a unit to select · tap the ground to move ·
-        tap an enemy to attack. On desktop, drag to box-select and use right-drag or WASD to pan.
-      </p>
+      <div class="hint-strip">
+        <span>${icon('build')}Drag or screen edge to pan</span>
+        <span>${icon('age')}Pinch or wheel to zoom</span>
+        <span>${icon('villager')}Click a unit to select</span>
+        <span>${icon('rally')}Right-click to move</span>
+        <span>${icon('attack')}Right-click an enemy to attack</span>
+      </div>
     </div>`;
   }
 

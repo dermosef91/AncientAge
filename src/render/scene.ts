@@ -20,6 +20,7 @@ import {
 } from 'three';
 import { clamp, lerp, lerpAngle, smoothstep } from '../core/math';
 import type { Game } from '../sim/game';
+import type { Biome } from '../sim/mapgen';
 import { TILE, WORLD_HALF } from '../sim/grid';
 import type { Entity, GameEvent, ResourceNode } from '../sim/types';
 import { buildingModel, clearBuildingCache } from './buildings';
@@ -41,6 +42,13 @@ import { RingGeometry, MeshBasicMaterial, DoubleSide } from 'three';
 
 export const TEAM_COLORS = [0x3fb8e8, 0xe8563f];
 
+/** Sky, haze and sunlight per homeland. */
+const BIOME_AIR: Record<Biome, { sky: number; fog: number; sun: number }> = {
+  egypt: { sky: 0xa8cfe0, fog: 0xdcd0b0, sun: 0xfff0c8 },
+  greece: { sky: 0x8fc6dd, fog: 0xaed4e0, sun: 0xfff1d4 },
+  rome: { sky: 0x8dbfd8, fog: 0xc2d6c8, sun: 0xfff4e2 },
+};
+
 const _m = new Matrix4();
 const _v = new Vector3();
 const _v2 = new Vector3();
@@ -56,6 +64,12 @@ interface UnitVisual {
   /** Smoothed animation state. */
   bobPhase: number;
   spawnT: number;
+  /** Previous tick's swing timer, to catch the frame the blow lands. */
+  lastSwing: number;
+  /** Counts 1 → 0 through the strike and its recovery. */
+  strikeT: number;
+  /** Counts 1 → 0 through a flinch when the unit is hit. */
+  flinchT: number;
 }
 
 interface BuildingVisual {
@@ -189,7 +203,14 @@ export class SceneRenderer {
     this.disposeWorld();
     this.game = game;
 
-    this.terrain = buildTerrain(game.grid, this.makePaths(game));
+    // Sky and haze follow the homeland too: a bleached desert glare for Egypt,
+    // the warm Aegean default for Greece, cooler green air for Rome.
+    const air = BIOME_AIR[game.biome];
+    (this.scene.background as Color).set(air.sky);
+    (this.scene.fog as Fog).color.set(air.fog);
+    this.sun.color.set(air.sun);
+
+    this.terrain = buildTerrain(game.grid, this.makePaths(game), game.biome);
     this.staticGroup.add(this.terrain.ground);
     this.staticGroup.add(this.terrain.water);
 
@@ -504,7 +525,17 @@ export class SceneRenderer {
         const pool = this.unitPool(faction, u.type);
         const slot = pool.alloc();
         if (slot < 0) continue;
-        vis = { key, slot, carrySlot: -1, carryKey: '', bobPhase: u.phase, spawnT: 0 };
+        vis = {
+          key,
+          slot,
+          carrySlot: -1,
+          carryKey: '',
+          bobPhase: u.phase,
+          spawnT: 0,
+          lastSwing: 0,
+          strikeT: 0,
+          flinchT: 0,
+        };
         this.unitVisuals.set(u.id, vis);
       }
       const pool = this.unitPool(faction, u.type);
@@ -536,12 +567,62 @@ export class SceneRenderer {
         lean = moving * 0.1;
       }
 
-      // Attack lunge: quick forward jab as the swing resolves.
-      if (u.state === 'attack' && u.def.attackSpeed > 0) {
-        const cyc = clamp(1 - u.attackCooldown / u.def.attackSpeed, 0, 1);
-        const jab = Math.sin(clamp((cyc - 0.05) / 0.35, 0, 1) * Math.PI);
-        lean += jab * 0.28;
-        bob += jab * 0.04;
+      // Attack: anticipation while the blow winds up, a sharp strike on the
+      // frame it lands, then a recovery. The sim owns the timing — swingTimer
+      // counts down through the windup and hits zero exactly when damage is
+      // dealt — so the motion stays locked to what actually happens.
+      if (u.swingTimer <= 0 && vis.lastSwing > 0) vis.strikeT = 1;
+      vis.lastSwing = u.swingTimer;
+      if (vis.strikeT > 0) vis.strikeT = Math.max(0, vis.strikeT - dt * 4.2);
+
+      const ranged = u.def.role === 'ranged' || u.def.role === 'naval';
+      if (u.swingTimer > 0 && u.def.windup > 0) {
+        // Wind-up: pull back, further the closer the release gets.
+        const w = clamp(1 - u.swingTimer / u.def.windup, 0, 1);
+        const pull = Math.sin(w * Math.PI * 0.5);
+        if (ranged) {
+          // Drawing a bow: settle, lean into the shot, steady the shoulders.
+          lean -= pull * 0.1;
+          roll += pull * 0.07;
+          bob += pull * 0.02;
+        } else {
+          lean -= pull * 0.2;
+          roll -= pull * 0.13;
+          bob += pull * 0.05;
+        }
+      }
+      if (vis.strikeT > 0) {
+        // Strike: fast out, slower back. The curve is front-loaded so the hit
+        // reads on the frame the damage lands.
+        const k = vis.strikeT;
+        const snap = k > 0.72 ? (1 - k) / 0.28 : k / 0.72;
+        if (ranged) {
+          lean += snap * 0.16;
+          roll -= snap * 0.1;
+        } else {
+          lean += snap * 0.42;
+          roll += snap * 0.16;
+          bob -= snap * 0.06;
+        }
+      }
+
+      // Flinch when hit, so a fight reads from both sides.
+      if (u.hurtTimer > 0) vis.flinchT = 1;
+      else if (vis.flinchT > 0) vis.flinchT = Math.max(0, vis.flinchT - dt * 5);
+      if (vis.flinchT > 0 && u.state !== 'dead') {
+        const f = Math.sin(vis.flinchT * Math.PI) * 0.9;
+        lean -= f * 0.13;
+        roll += f * 0.09;
+      }
+
+      // Working: a repeating hammer stroke, so a building site reads as busy.
+      if (u.state === 'build' || u.state === 'gather') {
+        const rate = u.state === 'build' ? 6.4 : 4.6;
+        const swing = Math.sin(this.time * rate + u.phase * 3.1);
+        const stroke = Math.max(0, swing);
+        lean += stroke * (u.state === 'build' ? 0.34 : 0.26);
+        bob += stroke * 0.05;
+        roll += swing * 0.06;
       }
 
       let tilt = 0;
@@ -645,6 +726,12 @@ export class SceneRenderer {
     const seen = new Set<number>();
     let scaffoldUsed = 0;
 
+    // Sites with a villager actually working them animate; abandoned ones rest.
+    const activeSites = new Set<number>();
+    for (const u of game.units) {
+      if (u.state === 'build' && u.siteId) activeSites.add(u.siteId);
+    }
+
     for (const b of game.buildings) {
       seen.add(b.id);
       const faction = game.player(b.owner).faction;
@@ -664,10 +751,17 @@ export class SceneRenderer {
       let sy = 1;
       let sxz = 1;
       let sink = 0;
+      const working = !b.complete && activeSites.has(b.id);
       if (!b.complete) {
         const p = smoothstep(0, 1, b.progress);
         sy = 0.06 + 0.94 * p;
         sxz = 0.86 + 0.14 * p;
+        // Each hammer stroke settles the frame a little; idle sites sit still.
+        if (working) {
+          const beat = Math.sin(this.time * 6.4 + b.phase);
+          sy *= 1 + Math.max(0, beat) * 0.035;
+          sxz *= 1 - Math.max(0, beat) * 0.012;
+        }
       } else if (vis.completeT < 1) {
         vis.completeT = Math.min(1, vis.completeT + 0.06);
         const pop = Math.sin(vis.completeT * Math.PI) * 0.07;
@@ -699,11 +793,14 @@ export class SceneRenderer {
       }
       pool.setColor(vis.slot, _color);
 
-      // Scaffolding while under construction.
+      // Scaffolding while under construction. It climbs with the building and
+      // sways while someone is actually swinging a hammer at it.
       if (!b.complete && !b.dead && scaffoldUsed < this.scaffoldPool.capacity) {
         const r = (b.size * TILE) / 2 + 0.35;
-        this.scaffoldPool.place(scaffoldUsed, b.x, y, b.z, 0.3, r, 1 + b.size * 0.35, r);
-        this.scaffoldPool.setColor(scaffoldUsed, 0xffffff);
+        const climb = 1 + b.size * 0.35 * (0.55 + 0.45 * smoothstep(0, 1, b.progress));
+        const sway = working ? Math.sin(this.time * 3.2 + b.phase) * 0.045 : 0;
+        this.scaffoldPool.place(scaffoldUsed, b.x, y, b.z, 0.3 + sway, r, climb, r);
+        this.scaffoldPool.setColor(scaffoldUsed, working ? 0xfff0d2 : 0xffffff);
         scaffoldUsed++;
       }
 
@@ -943,6 +1040,31 @@ export class SceneRenderer {
         gravity: -1.1,
         up: 0.5,
         spread: 0.12,
+      });
+      budget--;
+    }
+    this.emitBuildDust();
+  }
+
+  /** Chips and dust thrown off wherever a villager is raising a building. */
+  private emitBuildDust(): void {
+    const game = this.game;
+    let budget = 2;
+    for (const u of game.units) {
+      if (budget <= 0) break;
+      if (u.state !== 'build' || !u.siteId) continue;
+      if (Math.random() > 0.3) continue;
+      const site = game.entity(u.siteId);
+      if (!site || site.kind !== 'building' || site.complete) continue;
+      const y = game.grid.heightAt(u.x, u.z);
+      this.particles.emit('dust', u.x, y + 0.35, u.z, 1, {
+        color: C.dust,
+        speed: 0.5,
+        size: 0.11,
+        life: 0.5,
+        gravity: -1.6,
+        up: 1.1,
+        spread: 0.3,
       });
       budget--;
     }

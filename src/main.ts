@@ -1,7 +1,7 @@
 import './style.css';
 import { audio } from './audio/audio';
 import { clamp } from './core/math';
-import { Controls } from './input/controls';
+import { Controls, type HotkeyMods, type PointerIntent } from './input/controls';
 import { Minimap } from './render/minimap';
 import { SceneRenderer } from './render/scene';
 import { SkirmishAI } from './sim/ai';
@@ -47,6 +47,12 @@ class GameController {
   private placing: BuildingTypeId | null = null;
   private buildMenuOpen = false;
   private rallyBuildingId = 0;
+
+  /** Control groups, keyed 1-9 and 0, holding entity ids like AoE. */
+  private groups = new Map<number, number[]>();
+  private lastGroupKey = -1;
+  private lastGroupTime = 0;
+  private helpOpen = false;
 
   private accumulator = 0;
   private lastTime = 0;
@@ -94,7 +100,9 @@ class GameController {
       },
       onMenu: () => this.openMenu(),
       onMinimapPoint: (px, py) => this.minimapJump(px, py),
+      onMinimapCommand: (px, py) => this.minimapCommand(px, py),
       onCoachDismiss: () => this.dismissCoach(),
+      onHelp: () => this.setHelp(!this.helpOpen),
     });
 
     this.screens = new Screens(uiRoot, {
@@ -127,14 +135,16 @@ class GameController {
     this.controls = new Controls(
       this.scene,
       {
-        onTap: (x, y) => this.handleTap(x, y),
-        onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
-        onBoxSelect: (x0, y0, x1, y1) => this.handleBoxSelect(x0, y0, x1, y1),
+        onTap: (i) => this.handleTap(i),
+        onDoubleTap: (i) => this.handleDoubleTap(i),
+        onCommand: (i) => this.handleCommand(i),
+        onBoxSelect: (x0, y0, x1, y1, add) => this.handleBoxSelect(x0, y0, x1, y1, add),
         onGhostMove: (x, y) => this.updateGhost(x, y),
         onGhostPlace: (x, y) => this.commitPlacement(x, y),
+        onGhostCancel: () => this.cancelPlacement(),
         onHover: (x, y) => this.handleHover(x, y),
         onCancel: () => this.handleCancel(),
-        onFocusHome: () => this.focusHome(),
+        onHotkey: (key, mods) => this.handleHotkey(key, mods),
         isPlacing: () => this.placing !== null,
       },
       uiRoot,
@@ -183,6 +193,10 @@ class GameController {
     this.placing = null;
     this.buildMenuOpen = false;
     this.rallyBuildingId = 0;
+    this.groups.clear();
+    this.lastGroupKey = -1;
+    this.helpOpen = false;
+    this.hud.setHelpVisible(false);
     this.accumulator = 0;
     this.coachStep = 0;
     this.coachDismissed = false;
@@ -309,6 +323,8 @@ class GameController {
 
     this.hud.update(this.game, this.selection, this.placing, this.buildMenuOpen);
     this.hud.setIdleCount(this.idleVillagers().length);
+    this.hud.setGroups(this.groupSizes());
+    this.hud.setDesktop(this.controls.hasMouse);
     this.hud.setObjectives(this.objectives());
     this.hud.setFps(this.showFps ? this.fpsValue : 0);
     this.minimap.draw(this.scene.cameraTarget, this.scene.zoom * 1.15);
@@ -407,6 +423,25 @@ class GameController {
     if (!silent && entities.length) audio.play('select');
   }
 
+  /** Shift+click semantics: add what is missing, drop what is already held. */
+  private toggleSelection(entity: Entity): void {
+    const i = this.selection.findIndex((e) => e.id === entity.id);
+    if (i >= 0) {
+      const next = this.selection.slice();
+      next.splice(i, 1);
+      this.setSelection(next, true);
+      return;
+    }
+    this.setSelection([...this.selection, entity]);
+  }
+
+  private addSelection(entities: Entity[]): void {
+    const seen = new Set(this.selection.map((e) => e.id));
+    const added = entities.filter((e) => !seen.has(e.id));
+    if (added.length === 0) return;
+    this.setSelection([...this.selection, ...added]);
+  }
+
   private selectedOwnUnits(): Unit[] {
     return this.selection.filter((e): e is Unit => e.kind === 'unit' && e.owner === 0);
   }
@@ -435,13 +470,18 @@ class GameController {
   }
 
   private selectIdleVillager(): void {
+    this.cycleIdleVillager(1);
+  }
+
+  /** `.` and `,` walk the idle list forwards and backwards, as AoE does. */
+  private cycleIdleVillager(dir: number): void {
     const idle = this.idleVillagers();
     if (idle.length === 0) {
       this.hud.toast('No idle villagers', 'info', 1500);
       audio.play('deny');
       return;
     }
-    this.idleCycle = (this.idleCycle + 1) % idle.length;
+    this.idleCycle = (this.idleCycle + dir + idle.length * 2) % idle.length;
     const u = idle[this.idleCycle];
     this.setSelection([u]);
     this.scene.focusOn(u.x, u.z);
@@ -460,30 +500,84 @@ class GameController {
     this.scene.focusOn(world.x, world.z);
   }
 
+  /** Right-click on the minimap marches the selection there. */
+  private minimapCommand(px: number, py: number): void {
+    if (!this.game || !this.running) return;
+    const own = this.selectedOwnUnits();
+    if (own.length === 0) {
+      this.minimapJump(px, py);
+      return;
+    }
+    const rect = this.hud.minimapCanvas.getBoundingClientRect();
+    const size = rect.width;
+    const world = this.minimap.mapToWorld((px / size) * size, (py / size) * size);
+    this.game.commandMove(own, world.x, world.z, true);
+    this.scene.addOrderPulse(world.x, world.z);
+    audio.play('command');
+  }
+
   /** ---------------------------------------------------------------------
    * Pointer intents
    * ------------------------------------------------------------------- */
-  private handleTap(cx: number, cy: number): void {
+  /**
+   * Left-click / tap. A mouse only ever selects here — orders live on the right
+   * button, as in Age of Empires. Touch keeps the one-finger context action,
+   * because a phone has no second button to put it on.
+   */
+  private handleTap(intent: PointerIntent): void {
     if (!this.game || !this.running) return;
-    const game = this.game;
+    if (this.consumeRally(intent)) return;
+    if (this.buildMenuOpen && !intent.mouse) this.setBuildMenu(false);
 
-    if (this.rallyBuildingId) {
-      const b = game.entity(this.rallyBuildingId);
-      const point = this.scene.screenToGround(cx, cy);
-      if (b && b.kind === 'building') {
-        b.rallyX = point.x;
-        b.rallyZ = point.z;
-        this.scene.addOrderPulse(point.x, point.z, 0xe9c46a);
-        this.hud.toast('Rally point set', 'good', 1400);
-        audio.play('command');
-      }
-      this.rallyBuildingId = 0;
+    if (intent.mouse) {
+      this.selectAt(intent);
       return;
     }
+    this.contextAction(intent, true);
+  }
 
-    if (this.buildMenuOpen) this.setBuildMenu(false);
+  /** Right-click: the context order, never a selection change. */
+  private handleCommand(intent: PointerIntent): void {
+    if (!this.game || !this.running) return;
+    if (this.consumeRally(intent)) return;
+    this.contextAction(intent, false);
+  }
 
-    const hit = this.scene.pickAt(cx, cy);
+  /** Consumes the click that places a pending rally point. */
+  private consumeRally(intent: PointerIntent): boolean {
+    if (!this.rallyBuildingId || !this.game) return false;
+    const b = this.game.entity(this.rallyBuildingId);
+    const point = this.scene.screenToGround(intent.x, intent.y);
+    if (b && b.kind === 'building') {
+      b.rallyX = point.x;
+      b.rallyZ = point.z;
+      this.scene.addOrderPulse(point.x, point.z, 0xe9c46a);
+      this.hud.toast('Rally point set', 'good', 1400);
+      audio.play('command');
+    }
+    this.rallyBuildingId = 0;
+    return true;
+  }
+
+  private selectAt(intent: PointerIntent): void {
+    const hit = this.scene.pickAt(intent.x, intent.y);
+    if (hit.entity) {
+      if (intent.additive) this.toggleSelection(hit.entity);
+      else this.setSelection([hit.entity]);
+      return;
+    }
+    if (!intent.additive && this.selection.length) this.setSelection([], true);
+  }
+
+  /**
+   * Move / attack / gather / assist, picked from whatever sits under the cursor.
+   * `allowSelect` lets a touch tap fall back to selecting, which a right-click
+   * must never do.
+   */
+  private contextAction(intent: PointerIntent, allowSelect: boolean): void {
+    if (!this.game) return;
+    const game = this.game;
+    const hit = this.scene.pickAt(intent.x, intent.y);
     const own = this.selectedOwnUnits();
 
     // Enemy target -> attack.
@@ -495,20 +589,30 @@ class GameController {
         audio.play('command');
         return;
       }
-      this.setSelection([hit.entity]);
+      if (allowSelect) this.setSelection([hit.entity]);
       return;
     }
 
-    // Own entity -> select.
+    // Own construction site -> send the selected villagers to help.
     if (hit.entity && hit.entity.owner === 0) {
-      this.setSelection([hit.entity]);
       if (hit.entity.kind === 'building' && !hit.entity.complete) {
         const builders = own.filter((u) => u.def.canBuild);
         if (builders.length) {
           game.commandBuild(builders, hit.entity.id);
-          this.setSelection(builders, true);
+          if (allowSelect) this.setSelection(builders, true);
           audio.play('command');
+          return;
         }
+      }
+      if (allowSelect) {
+        this.setSelection([hit.entity]);
+        return;
+      }
+      // Right-clicking your own building walks the selection over to it.
+      if (own.length > 0) {
+        game.commandMove(own, hit.entity.x, hit.entity.z, false);
+        this.scene.addOrderPulse(hit.entity.x, hit.entity.z);
+        audio.play('command');
       }
       return;
     }
@@ -531,23 +635,35 @@ class GameController {
       audio.play('command');
       return;
     }
-    if (this.selection.length) this.setSelection([], true);
+    if (allowSelect && this.selection.length) this.setSelection([], true);
   }
 
-  private handleDoubleTap(cx: number, cy: number): void {
+  /** Double-click a unit to take every one of its kind currently on screen. */
+  private handleDoubleTap(intent: PointerIntent): void {
     if (!this.game) return;
-    const hit = this.scene.pickAt(cx, cy);
+    const hit = this.scene.pickAt(intent.x, intent.y);
     if (hit.entity && hit.entity.kind === 'unit' && hit.entity.owner === 0) {
       const type = hit.entity.type;
-      const all = this.game.units.filter((u) => u.owner === 0 && u.state !== 'dead' && u.type === type);
-      this.setSelection(all);
-      this.hud.toast(`Selected all ${UNITS[type].name}s`, 'info', 1400);
+      const onScreen = this.game.units.filter(
+        (u) => u.owner === 0 && u.state !== 'dead' && u.type === type && this.isOnScreen(u),
+      );
+      const picked = onScreen.length > 0 ? onScreen : [hit.entity];
+      if (intent.additive) this.addSelection(picked);
+      else this.setSelection(picked);
+      this.hud.toast(`Selected ${picked.length} ${UNITS[type].name}${picked.length > 1 ? 's' : ''}`, 'info', 1400);
       return;
     }
-    this.handleTap(cx, cy);
+    this.handleTap(intent);
   }
 
-  private handleBoxSelect(x0: number, y0: number, x1: number, y1: number): void {
+  private isOnScreen(u: Unit): boolean {
+    if (!this.game) return false;
+    const y = this.game.grid.heightAt(u.x, u.z) + 0.5;
+    const out = this.scene.worldToScreen(u.x, y, u.z);
+    return out.visible && out.x >= 0 && out.y >= 0 && out.x <= window.innerWidth && out.y <= window.innerHeight;
+  }
+
+  private handleBoxSelect(x0: number, y0: number, x1: number, y1: number, additive: boolean): void {
     if (!this.game) return;
     const minX = Math.min(x0, x1);
     const maxX = Math.max(x0, x1);
@@ -565,21 +681,191 @@ class GameController {
       if (out.visible && sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) picked.push(u);
     }
     if (picked.length === 0) {
-      this.setSelection([], true);
+      if (!additive) this.setSelection([], true);
       return;
     }
     // Prefer combat units when a drag catches a mixed crowd.
     const fighters = picked.filter((u) => u.type !== 'villager');
-    this.setSelection(fighters.length > 0 ? fighters : picked);
+    const chosen = fighters.length > 0 ? fighters : picked;
+    if (additive) this.addSelection(chosen);
+    else this.setSelection(chosen);
   }
 
   private handleHover(cx: number, cy: number): void {
     if (!this.game || !this.running) return;
     const hit = this.scene.pickAt(cx, cy);
     this.scene.setHighlight(hit.entity ? hit.entity.id : -1);
+
+    // Tell the player what a right-click would do here.
+    let cursor = 'default';
+    if (this.selectedOwnUnits().length > 0) {
+      if (hit.entity && hit.entity.owner !== 0) cursor = 'crosshair';
+      else if (hit.node || (hit.entity && hit.entity.owner === 0)) cursor = 'pointer';
+    } else if (hit.entity) {
+      cursor = 'pointer';
+    }
+    if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+  }
+
+  /** ---------------------------------------------------------------------
+   * Keyboard
+   * ------------------------------------------------------------------- */
+  private handleHotkey(key: string, mods: HotkeyMods): boolean {
+    if (key === 'f1' || key === '?' || key === '/') {
+      this.setHelp(!this.helpOpen);
+      return true;
+    }
+    if (this.helpOpen) {
+      this.setHelp(false);
+      return true;
+    }
+    if (!this.game || !this.running || this.paused || this.screens.anyVisible) return false;
+
+    const digit = /^(?:Digit|Numpad)(\d)$/.exec(mods.code);
+    if (digit) {
+      const n = Number(digit[1]);
+      // Ctrl+digit is the AoE binding, but browsers keep it for tab switching
+      // and will not let a page cancel it — so Shift+digit assigns as well.
+      if (mods.ctrl || mods.shift) this.assignGroup(n);
+      else this.recallGroup(n);
+      return true;
+    }
+
+    switch (key) {
+      case ' ':
+      case 'home':
+        this.focusHome();
+        return true;
+      case 'h':
+        this.selectTownCentre();
+        return true;
+      case '.':
+      case '>':
+        this.cycleIdleVillager(1);
+        return true;
+      case ',':
+      case '<':
+        this.cycleIdleVillager(-1);
+        return true;
+      case 'b':
+        this.toggleBuildMenu();
+        return true;
+      case 'delete':
+        this.deleteSelection();
+        return true;
+      case '+':
+      case '=':
+        this.scene.zoomBy(Math.exp(-0.34));
+        return true;
+      case '-':
+      case '_':
+        this.scene.zoomBy(Math.exp(0.34));
+        return true;
+      default:
+        break;
+    }
+
+    // Everything else is a grid hotkey aimed at whichever panel is showing.
+    return this.hud.triggerGrid(key, this.buildMenuOpen);
+  }
+
+  private assignGroup(n: number): void {
+    const ids = this.selection.filter((e) => e.owner === 0).map((e) => e.id);
+    if (ids.length === 0) {
+      this.groups.delete(n);
+      this.hud.toast(`Group ${n} cleared`, 'info', 1200);
+      return;
+    }
+    this.groups.set(n, ids);
+    this.hud.setGroups(this.groupSizes());
+    this.hud.toast(`Group ${n}: ${ids.length} selected`, 'good', 1300);
+    audio.play('ui');
+  }
+
+  private recallGroup(n: number): void {
+    if (!this.game) return;
+    const game = this.game;
+    const ids = this.groups.get(n);
+    const members = (ids ?? [])
+      .map((id) => game.entity(id))
+      .filter((e): e is Entity => !!e && game.isAlive(e));
+    if (members.length === 0) {
+      if (ids) {
+        this.groups.delete(n);
+        this.hud.setGroups(this.groupSizes());
+      }
+      audio.play('deny');
+      return;
+    }
+    this.setSelection(members);
+
+    // A second press inside the window jumps the camera to the group.
+    const now = performance.now();
+    if (this.lastGroupKey === n && now - this.lastGroupTime < 420) {
+      const cx = members.reduce((s, e) => s + e.x, 0) / members.length;
+      const cz = members.reduce((s, e) => s + e.z, 0) / members.length;
+      this.scene.focusOn(cx, cz);
+    }
+    this.lastGroupKey = n;
+    this.lastGroupTime = now;
+  }
+
+  private groupSizes(): Map<number, number> {
+    const out = new Map<number, number>();
+    const game = this.game;
+    if (!game) return out;
+    for (const [n, ids] of this.groups) {
+      const live = ids.filter((id) => game.isAlive(game.entity(id))).length;
+      if (live > 0) out.set(n, live);
+    }
+    return out;
+  }
+
+  private selectTownCentre(): void {
+    if (!this.game) return;
+    const tc = this.game.buildingsOfPlayer(0).find((b) => b.type === 'towncenter');
+    if (!tc) {
+      audio.play('deny');
+      return;
+    }
+    this.setSelection([tc]);
+    this.scene.focusOn(tc.x, tc.z);
+  }
+
+  /** Deletes the selected units, as Delete does in Age of Empires. */
+  private deleteSelection(): void {
+    if (!this.game) return;
+    const game = this.game;
+    const units = this.selection.filter((e): e is Unit => e.kind === 'unit' && e.owner === 0);
+    const buildings = this.selection.filter(
+      (e) => e.kind === 'building' && e.owner === 0 && e.type !== 'towncenter',
+    );
+    if (units.length === 0 && buildings.length === 0) {
+      if (this.selection.some((e) => e.kind === 'building' && e.type === 'towncenter')) {
+        this.hud.toast('The town centre cannot be deleted', 'bad', 1800);
+      }
+      audio.play('deny');
+      return;
+    }
+    for (const u of units) game.killUnit(u);
+    for (const b of buildings) {
+      if (b.kind === 'building') game.destroyBuilding(b);
+    }
+    this.setSelection([], true);
+    this.hud.toast(`Deleted ${units.length + buildings.length}`, 'info', 1400);
+  }
+
+  private setHelp(open: boolean): void {
+    this.helpOpen = open;
+    this.hud.setHelpVisible(open);
+    audio.play('ui');
   }
 
   private handleCancel(): void {
+    if (this.helpOpen) {
+      this.setHelp(false);
+      return;
+    }
     if (this.placing) {
       this.cancelPlacement();
       return;
@@ -860,21 +1146,30 @@ class GameController {
     const game = this.game;
     if (!game || this.coachDismissed) return;
     const p = game.player(0);
+    const pc = this.controls.hasMouse;
     const steps: { done: () => boolean; text: string }[] = [
       {
-        text: '<b>Drag</b> to look around and <b>pinch</b> to zoom. Your villagers are already gathering food.',
+        text: pc
+          ? 'Scroll with the <b>screen edge</b> or the <b>arrow keys</b>, zoom with the <b>wheel</b>. Press <b>F1</b> for the full controls. Your villagers are already gathering food.'
+          : '<b>Drag</b> to look around and <b>pinch</b> to zoom. Your villagers are already gathering food.',
         done: () => this.coachTimer > 11,
       },
       {
-        text: 'Tap your <b>Town Center</b>, then tap <b>Villager</b> to train more workers. More villagers means a faster economy.',
+        text: pc
+          ? 'Press <b>H</b> for your <b>Town Center</b>, then <b>Q</b> to train a villager. More villagers means a faster economy.'
+          : 'Tap your <b>Town Center</b>, then tap <b>Villager</b> to train more workers. More villagers means a faster economy.',
         done: () => game.countUnits(0, (u) => u.type === 'villager') >= 5,
       },
       {
-        text: 'Tap <b>Build</b> and place a <b>House</b> on clear ground to raise your population limit.',
+        text: pc
+          ? 'Press <b>B</b> for the build menu, <b>Q</b> for a <b>House</b>, then click clear ground to raise your population limit.'
+          : 'Tap <b>Build</b> and place a <b>House</b> on clear ground to raise your population limit.',
         done: () => game.countBuildings(0, 'house') >= 1,
       },
       {
-        text: 'Tap a villager, then tap <b>trees</b> or a <b>gold deposit</b> to send them to a new resource.',
+        text: pc
+          ? 'Left-click a villager, then <b>right-click</b> <b>trees</b> or a <b>gold deposit</b> to send them to a new resource.'
+          : 'Tap a villager, then tap <b>trees</b> or a <b>gold deposit</b> to send them to a new resource.',
         done: () => this.coachTimer > 70,
       },
       {

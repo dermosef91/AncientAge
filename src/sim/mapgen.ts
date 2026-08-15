@@ -14,6 +14,44 @@ import {
 import { NODE_AMOUNT, NODE_RESOURCE } from './data';
 import type { NodeTypeId, ResourceNode } from './types';
 
+/**
+ * Lowest a land tile may sit. The water mesh is a single plane at y=0.02
+ * covering the whole map, so anything below this would show sea through the
+ * middle of the island.
+ */
+const LAND_MIN_HEIGHT = 0.16;
+
+/**
+ * The homeland the match is fought over, taken from the player's civilisation.
+ * It shifts how much of the island is sand against grass and which trees grow
+ * on it, so an Egyptian game opens on desert and a Roman one on green hills.
+ */
+export type Biome = 'egypt' | 'greece' | 'rome';
+
+interface BiomeProfile {
+  /** Noise cutoff above which inland tiles go dry rather than green. */
+  dryBias: number;
+  /** Chance a dry tile turns to open sand. */
+  sandChance: number;
+  /** How far inland the beach reaches, in tiles. */
+  beachWidth: number;
+  /** Decoration weights, sampled in this order against one roll. */
+  palm: number;
+  olive: number;
+  cypress: number;
+  grass: number;
+  rock: number;
+}
+
+const BIOMES: Record<Biome, BiomeProfile> = {
+  // Desert: broad sand, palms along every shore, little undergrowth.
+  egypt: { dryBias: -0.3, sandChance: 0.72, beachWidth: 3.6, palm: 0.075, olive: 0.012, cypress: 0.006, grass: 0.05, rock: 0.035 },
+  // Rocky Mediterranean: olive groves, cypress stands, stony ground.
+  greece: { dryBias: 0.02, sandChance: 0.45, beachWidth: 2.2, palm: 0.03, olive: 0.045, cypress: 0.032, grass: 0.11, rock: 0.05 },
+  // Green hills: grass through to the shoreline, dark pine-like cypress.
+  rome: { dryBias: 0.34, sandChance: 0.16, beachWidth: 1.6, palm: 0.012, olive: 0.022, cypress: 0.05, grass: 0.16, rock: 0.03 },
+};
+
 export interface Decoration {
   kind: 'palm' | 'olive' | 'cypress' | 'rock' | 'grass' | 'reed' | 'ruin';
   x: number;
@@ -23,6 +61,7 @@ export interface Decoration {
 }
 
 export interface GeneratedMap {
+  biome: Biome;
   grid: Grid;
   nodes: ResourceNode[];
   decorations: Decoration[];
@@ -109,8 +148,9 @@ function makeNode(type: NodeTypeId, x: number, z: number, rng: Rng): ResourceNod
  * Builds an L-shaped sea in the north-west, rolling inland terrain, rocky
  * outcrops, and a balanced spread of resources around the two start positions.
  */
-export function generateMap(seed: number): GeneratedMap {
+export function generateMap(seed: number, biome: Biome = 'greece'): GeneratedMap {
   nodeIdCounter = 1;
+  const bio = BIOMES[biome];
   const rng = new Rng(seed);
   const { fbm, noise2 } = makeNoise(rng);
   const grid = new Grid();
@@ -127,11 +167,12 @@ export function generateMap(seed: number): GeneratedMap {
     return Math.min(gz - northCoast, gx - westCoast);
   };
 
-  // Start positions: player south-west, enemy north-east. Both within reach of
-  // the shoreline so docks are meaningful for either side.
+  // Start positions: player south-west, enemy north-east, pushed out towards
+  // opposite corners so neither settlement is under early pressure. Both stay
+  // within reach of the shoreline so docks are meaningful for either side.
   const starts = [
-    { x: grid.worldX(20), z: grid.worldZ(52) },
-    { x: grid.worldX(53), z: grid.worldZ(21) },
+    { x: grid.worldX(18), z: grid.worldZ(59) },
+    { x: grid.worldX(59), z: grid.worldZ(18) },
   ];
 
   const startTiles = starts.map((s) => ({ gx: grid.tileX(s.x), gz: grid.tileZ(s.z) }));
@@ -156,12 +197,13 @@ export function generateMap(seed: number): GeneratedMap {
         const hills = fbm(gx * 0.045, gz * 0.045, 4);
         const detail = fbm(gx * 0.13 + 40, gz * 0.13 + 40, 3);
         h = 0.05 + smoothstep(0, 4, sea) * (0.35 + hills * 1.9 + detail * 0.35);
-        // Beaches near the waterline, grass inland with dry patches.
-        if (sea < 2.2) t = T_SAND;
+        // Beaches near the waterline, grass inland with dry patches. How wide
+        // the sand runs and how far the green reaches is the biome's doing.
+        if (sea < bio.beachWidth) t = T_SAND;
         else {
           const dry = fbm(gx * 0.08 + 90, gz * 0.08 + 90, 3);
-          t = dry > 0.02 ? T_DRY : T_GRASS;
-          if (dry > 0.26 && rng.bool(0.45)) t = T_SAND;
+          t = dry > bio.dryBias ? T_DRY : T_GRASS;
+          if (dry > bio.dryBias + 0.24 && rng.bool(bio.sandChance)) t = T_SAND;
         }
       }
 
@@ -234,6 +276,15 @@ export function generateMap(seed: number): GeneratedMap {
         }
       } else run = 0;
     }
+  }
+
+  // The water plane spans the whole map, so any land that dips below it would
+  // be flooded from the inside. Lift every land tile clear of the waterline
+  // after all the height passes have had their say.
+  for (let i = 0; i < grid.height.length; i++) {
+    const t = grid.terrain[i];
+    if (t === T_DEEP || t === T_SHALLOW) continue;
+    if (grid.height[i] < LAND_MIN_HEIGHT) grid.height[i] = LAND_MIN_HEIGHT;
   }
 
   // --- Resource placement ---------------------------------------------------
@@ -356,17 +407,19 @@ export function generateMap(seed: number): GeneratedMap {
 
       if (t === T_SHALLOW && rng.bool(0.05)) {
         decorations.push({ kind: 'reed', x: wx, z: wz, scale: rng.range(0.7, 1.2), rot: rng.range(0, 6.28) });
-      } else if (t === T_SAND && sea >= 0 && sea < 4 && rng.bool(0.045)) {
+      } else if (t === T_SAND && sea >= 0 && sea < 5 && rng.bool(bio.palm)) {
         decorations.push({ kind: 'palm', x: wx, z: wz, scale: rng.range(0.85, 1.3), rot: rng.range(0, 6.28) });
       } else if ((t === T_GRASS || t === T_DRY) && !nearStart(gx, gz, 4)) {
+        // One roll walked through the biome's weights, heaviest cover last.
         const r = rng.next();
-        if (r < 0.035) {
+        let acc = bio.olive;
+        if (r < acc) {
           decorations.push({ kind: 'olive', x: wx, z: wz, scale: rng.range(0.8, 1.25), rot: rng.range(0, 6.28) });
-        } else if (r < 0.05) {
+        } else if (r < (acc += bio.cypress)) {
           decorations.push({ kind: 'cypress', x: wx, z: wz, scale: rng.range(0.85, 1.35), rot: rng.range(0, 6.28) });
-        } else if (r < 0.16) {
+        } else if (r < (acc += bio.grass)) {
           decorations.push({ kind: 'grass', x: wx, z: wz, scale: rng.range(0.7, 1.3), rot: rng.range(0, 6.28) });
-        } else if (r < 0.195) {
+        } else if (r < acc + bio.rock) {
           decorations.push({ kind: 'rock', x: wx, z: wz, scale: rng.range(0.6, 1.4), rot: rng.range(0, 6.28) });
         }
       } else if (t === T_ROCK && rng.bool(0.25)) {
@@ -394,7 +447,7 @@ export function generateMap(seed: number): GeneratedMap {
     }
   }
 
-  return { grid, nodes, decorations, starts, seed };
+  return { biome, grid, nodes, decorations, starts, seed };
 }
 
 /** World-space extent helper for the minimap and camera clamping. */

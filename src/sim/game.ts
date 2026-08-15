@@ -22,7 +22,7 @@ import {
   refundCost,
 } from './data';
 
-import { generateMap, type Decoration } from './mapgen';
+import { generateMap, type Biome, type Decoration } from './mapgen';
 import type {
   Building,
   BuildingTypeId,
@@ -42,6 +42,12 @@ const PROJECTILE_SPEED = 24;
 /** Path computations allowed per simulation tick. */
 const PATH_BUDGET = 26;
 const HASH_CELL = 4;
+/** How far an idle villager will step to defend itself. */
+const VILLAGER_GUARD_RANGE = 3.6;
+/** Multiple of the guard radius an unordered fight may wander before breaking off. */
+const LEASH_FACTOR = 2.2;
+/** Widest "close enough" radius when walking into weapon range. */
+const CHASE_TOLERANCE = 0.4;
 
 export interface Mods {
   meleeAtk: number;
@@ -93,6 +99,7 @@ export class Game {
   readonly grid: Grid;
   readonly pathfinder: PathFinder;
   readonly decorations: Decoration[];
+  readonly biome: Biome;
   readonly starts: { x: number; z: number }[];
   readonly seed: number;
 
@@ -119,10 +126,12 @@ export class Game {
 
   constructor(playerFaction: FactionId, enemyFaction: FactionId, seed = Math.floor(Math.random() * 1e9)) {
     this.seed = seed;
-    const map = generateMap(seed);
+    // The island takes after the player's homeland.
+    const map = generateMap(seed, playerFaction);
     this.grid = map.grid;
     this.pathfinder = new PathFinder(this.grid);
     this.decorations = map.decorations;
+    this.biome = map.biome;
     this.starts = map.starts;
     this.nodes = map.nodes;
     for (const n of this.nodes) this.nodeById.set(n.id, n);
@@ -353,6 +362,8 @@ export class Game {
       phase: this.rng.range(0, Math.PI * 2),
       ordered: false,
       lastNodeId: 0,
+      guardX: x,
+      guardZ: z,
       deathTimer: 0,
     };
     this.units.push(u);
@@ -840,14 +851,22 @@ export class Game {
   private tickIdle(u: Unit): void {
     u.vx *= 0.5;
     u.vz *= 0.5;
-    if (u.def.aggroRange > 0) {
-      const t = this.acquireTarget(u, u.def.aggroRange);
+    // Anything with a weapon defends the ground it is standing on. Soldiers use
+    // their own aggro radius; villagers get a short one, so they hit back at
+    // whatever walks into the settlement without abandoning the job.
+    const radius = this.idleGuardRange(u);
+    if (radius > 0) {
+      const t = this.acquireTarget(u, radius);
       if (t) {
         u.targetId = t.id;
         u.state = 'chase';
         u.ordered = false;
+        u.guardX = u.x;
+        u.guardZ = u.z;
+        return;
       }
-    } else if (u.def.canGather && u.lastNodeId) {
+    }
+    if (u.def.canGather && u.lastNodeId) {
       // Villagers drift back to work when left alone.
       const node = this.nodeById.get(u.lastNodeId);
       if (node && !node.depleted) {
@@ -857,6 +876,12 @@ export class Game {
         u.lastNodeId = 0;
       }
     }
+  }
+
+  /** How far an idle unit will look for something to hit. */
+  private idleGuardRange(u: Unit): number {
+    if (u.def.attack <= 0) return 0;
+    return u.def.aggroRange > 0 ? u.def.aggroRange : VILLAGER_GUARD_RANGE;
   }
 
   private tickMove(u: Unit, dt: number): void {
@@ -880,7 +905,7 @@ export class Game {
     if (!this.isAlive(target)) {
       u.targetId = 0;
       // Look for something else nearby before standing down.
-      const next = u.def.aggroRange > 0 ? this.acquireTarget(u, u.def.aggroRange) : null;
+      const next = this.acquireTarget(u, this.idleGuardRange(u));
       if (next) {
         u.targetId = next.id;
         return;
@@ -888,6 +913,19 @@ export class Game {
       u.state = 'idle';
       u.ordered = false;
       return;
+    }
+
+    // A fight the player did not ask for is leashed to where it started, so a
+    // fleeing enemy cannot walk the whole settlement away from its work.
+    if (!u.ordered) {
+      const leash = this.idleGuardRange(u) * LEASH_FACTOR;
+      if (dist2(u.guardX, u.guardZ, u.x, u.z) > leash * leash) {
+        u.targetId = 0;
+        u.state = 'idle';
+        this.commandMove([u], u.guardX, u.guardZ, false);
+        u.ordered = false;
+        return;
+      }
     }
     const range = this.statRange(u);
     const gap = this.edgeDistance(u, target);
@@ -904,12 +942,17 @@ export class Game {
       }
     } else {
       u.state = 'chase';
-      // Stand just inside weapon range, approaching from our own side.
-      const r = this.entityRadius(target) + u.def.radius + range * 0.75;
+      // Stand just inside weapon range, approaching from our own side. The
+      // arrival tolerance has to fit inside the reach as well, or a short-range
+      // unit parks in the dead band just outside its own swing and never lands
+      // a blow — which is exactly what a villager's half-tile reach does.
+      const radii = this.entityRadius(target) + u.def.radius;
+      const tol = Math.min(CHASE_TOLERANCE, range * 0.4 + 0.1);
+      const r = Math.min(radii + range * 0.75, radii + range - tol - 0.12);
       const d = Math.max(0.001, dist(u.x, u.z, target.x, target.z));
       const tx = target.x + ((u.x - target.x) / d) * r;
       const tz = target.z + ((u.z - target.z) / d) * r;
-      this.navigate(u, tx, tz, 0.4, dt);
+      this.navigate(u, tx, tz, tol, dt);
     }
   }
 

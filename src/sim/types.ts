@@ -209,6 +209,9 @@ export interface Unit {
   ordered: boolean;
   /** Remembered gather node so villagers resume after delivering. */
   lastNodeId: number;
+  /** Where an auto-acquired fight started, so the unit can be leashed to it. */
+  guardX: number;
+  guardZ: number;
   deathTimer: number;
 }
 

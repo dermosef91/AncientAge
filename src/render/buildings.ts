@@ -364,42 +364,166 @@ function house(b: GeoBuilder, s: Style, f: FactionId, w: number, flags: FlagAnch
  * Farm
  * ------------------------------------------------------------------------- */
 function farm(b: GeoBuilder, s: Style, f: FactionId, w: number): number {
+  if (f === 'egypt') return farmEgypt(b, s, w);
+  if (f === 'greece') return farmGreece(b, s, w);
+  return farmRome(b, s, w);
+}
+
+/**
+ * Every farm keeps the same footprint: a worked field at the front and a yard
+ * strip across the back holding the outbuilding and its clutter, so nothing
+ * ever grows through a wall.
+ */
+const YARD_DEPTH = 1.9;
+
+/**
+ * Egypt: flood basins. Irrigation channels cut the field into wet squares of
+ * emmer, a shaduf sweep lifts water onto the beds, and reed baskets stack
+ * beside a mudbrick store.
+ */
+function farmEgypt(b: GeoBuilder, s: Style, w: number): number {
   const half = w / 2;
-  // Tilled soil bed.
-  b.boxOn(0, 0, 0, w - 0.3, 0.12, w - 0.3, C.dirt);
-  const rows = 6;
-  for (let i = 0; i < rows; i++) {
-    const z = -half + 0.9 + i * ((w - 1.8) / (rows - 1));
-    b.boxOn(0, 0.12, z, w - 1.4, 0.1, 0.34, shade(C.dirt, 0.86));
-    // Crop tufts along the row.
-    for (let j = 0; j < 7; j++) {
-      const x = -half + 0.9 + j * ((w - 1.8) / 6);
-      const t = ((i * 7 + j) % 5) / 5;
-      b.boxOn(x, 0.22, z, 0.26, 0.34 + t * 0.16, 0.26, i % 2 === 0 ? C.crop : C.cropDark);
-      b.boxOn(x, 0.52 + t * 0.16, z, 0.14, 0.18, 0.14, C.wheat);
+  const fieldBack = half - YARD_DEPTH;
+  const fieldDepth = fieldBack - (-half + 0.3);
+  const fieldZ = (-half + 0.3 + fieldBack) / 2;
+  b.boxOn(0, 0, 0, w - 0.3, 0.12, w - 0.3, shade(C.sandstone, 0.94));
+
+  // A channel down the middle of the field and one across it.
+  b.boxOn(0, 0.02, fieldZ, 0.36, 0.11, fieldDepth, C.waterShallow);
+  b.boxOn(0, 0.02, fieldZ, w - 0.7, 0.11, 0.36, C.waterShallow);
+
+  // Four flood basins between the channels, each bunded with mud.
+  const bw = (w - 1.1) / 2 - 0.12;
+  const bd = fieldDepth / 2 - 0.12;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const cx = sx * (bw / 2 + 0.26);
+      const cz = fieldZ + sz * (bd / 2 + 0.26);
+      b.boxOn(cx, 0.12, cz, bw, 0.09, bd, C.mudbrickDark);
+      b.boxOn(cx, 0.21, cz, bw - 0.22, 0.06, bd - 0.22, shade(C.dirt, 0.8));
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const x = cx + (i - 1) * (bw * 0.27);
+          const z = cz + (j - 1) * (bd * 0.27);
+          b.boxOn(x, 0.27, z, 0.18, 0.42, 0.18, (i + j) % 2 ? C.crop : C.cropDark);
+          b.boxOn(x, 0.69, z, 0.1, 0.18, 0.1, C.wheat);
+        }
+      }
     }
   }
-  // Fence.
-  const postColor = f === 'egypt' ? C.woodLight : C.wood;
-  for (let i = 0; i <= 6; i++) {
-    const t = -half + 0.15 + i * ((w - 0.3) / 6);
-    b.column(t, 0.12, -half + 0.15, 0.07, 0.08, 0.62, postColor, 5);
-    b.column(t, 0.12, half - 0.15, 0.07, 0.08, 0.62, postColor, 5);
-    b.column(-half + 0.15, 0.12, t, 0.07, 0.08, 0.62, postColor, 5);
-    b.column(half - 0.15, 0.12, t, 0.07, 0.08, 0.62, postColor, 5);
+
+  // Yard: shaduf on the left, store on the right, baskets between.
+  const yz = half - YARD_DEPTH / 2 - 0.2;
+  const px = -half + 1.1;
+  b.column(px, 0.12, yz, 0.1, 0.13, 1.5, C.woodDark, 6);
+  b.box(px + 0.6, 1.52, yz, 1.9, 0.1, 0.1, C.wood, 0, 0, -0.34);
+  b.sphere(px + 1.4, 1.2, yz, 0.2, C.mudbrickDark, 7);
+  b.boxOn(half - 1.15, 0.12, yz, 1.5, 0.9, 1.3, s.wall);
+  b.parapet(half - 1.15, 1.02, yz, 1.55, 1.35, s.wallDark, 0.16);
+  b.boxOn(half - 1.15, 1.12, yz, 1.3, 0.06, 1.1, C.thatch);
+  b.column(half - 2.25, 0.12, yz - 0.1, 0.2, 0.22, 0.32, C.thatch, 7);
+  b.column(half - 2.25, 0.44, yz - 0.1, 0.17, 0.2, 0.24, C.thatch, 7);
+  return 1.9;
+}
+
+/**
+ * Greece: a terraced hillside — dry-stone retaining walls holding narrow beds
+ * of staked vines, an olive tree in the yard and amphorae for the pressing.
+ */
+function farmGreece(b: GeoBuilder, s: Style, w: number): number {
+  const half = w / 2;
+  const fieldFront = -half + 0.3;
+  const fieldBack = half - YARD_DEPTH;
+  b.boxOn(0, 0, 0, w - 0.3, 0.12, w - 0.3, shade(C.dirt, 0.9));
+
+  // Terraces stepping up towards the back of the plot.
+  const terraces = 3;
+  const step = (fieldBack - fieldFront) / terraces;
+  for (let t = 0; t < terraces; t++) {
+    const z0 = fieldFront + t * step;
+    const lift = 0.12 + t * 0.2;
+    b.boxOn(0, lift, z0 + step / 2, w - 0.9, 0.12, step - 0.1, shade(C.dirt, 0.84));
+    // Rubble wall holding the bed back.
+    for (let i = 0; i < 7; i++) {
+      const x = -half + 0.55 + i * ((w - 1.1) / 6);
+      b.rock(x, lift + 0.02, z0 + 0.04, 0.2, C.rockLight, i * 3 + t, 0);
+    }
+    // Staked vines tied along a running cord.
+    for (let i = 0; i < 4; i++) {
+      const x = -half + 0.9 + i * ((w - 1.8) / 3);
+      const vz = z0 + step * 0.62;
+      b.column(x, lift + 0.12, vz, 0.05, 0.06, 0.5, C.woodDark, 5);
+      b.sphere(x, lift + 0.72, vz, 0.24, C.oliveLeaf, 6, 0.7);
+      b.sphere(x + 0.09, lift + 0.58, vz, 0.14, C.cypressDark, 6, 0.8);
+    }
+    b.boxOn(0, lift + 0.66, z0 + step * 0.62, w - 1.7, 0.03, 0.03, C.woodLight);
   }
+
+  // Yard: olive tree, store, amphorae.
+  const yz = half - YARD_DEPTH / 2 - 0.2;
+  b.column(-half + 1.15, 0.12, yz, 0.13, 0.19, 0.8, C.oliveTrunk, 6);
+  b.sphere(-half + 1.15, 1.08, yz, 0.6, C.oliveLeaf, 7, 0.72);
+  b.sphere(-half + 0.85, 0.95, yz + 0.3, 0.35, shade(C.oliveLeaf, 0.86), 6, 0.8);
+  b.boxOn(half - 1.15, 0.12, yz, 1.4, 1.0, 1.25, s.wall);
+  tiledRoof(b, s, half - 1.15, 1.12, yz, 1.4, 1.25, 0.5, 0.1, true);
+  b.boxOn(half - 1.15, 0.12, yz - 0.66, 0.5, 0.7, 0.1, s.door);
+  for (let i = 0; i < 3; i++) {
+    b.column(half - 2.15, 0.12, yz - 0.5 + i * 0.45, 0.1, 0.16, 0.4, C.terracotta, 7);
+    b.sphere(half - 2.15, 0.54, yz - 0.5 + i * 0.45, 0.1, C.terracottaDark, 6, 0.6);
+  }
+  return 2.0;
+}
+
+/**
+ * Rome: a surveyed plot. Ruler-straight furrows inside a dressed-stone
+ * boundary, a cart track down the middle and a tiled villa rustica in the yard.
+ */
+function farmRome(b: GeoBuilder, s: Style, w: number): number {
+  const half = w / 2;
+  const fieldFront = -half + 0.45;
+  const fieldBack = half - YARD_DEPTH;
+  b.boxOn(0, 0, 0, w - 0.3, 0.12, w - 0.3, C.dirt);
+
+  // The track the surveyors ran through the middle.
+  const trackDepth = fieldBack - fieldFront;
+  b.boxOn(0, 0.12, (fieldFront + fieldBack) / 2, 0.5, 0.05, trackDepth, C.path);
+
+  const rows = 6;
+  const bw = (w - 1.5) / 2;
+  for (let i = 0; i < rows; i++) {
+    const z = fieldFront + 0.22 + i * ((trackDepth - 0.44) / (rows - 1));
+    for (const sx of [-1, 1]) {
+      const cx = sx * (bw / 2 + 0.35);
+      b.boxOn(cx, 0.12, z, bw, 0.08, 0.22, shade(C.dirt, 0.84));
+      for (let j = 0; j < 3; j++) {
+        const x = cx + (j - 1) * (bw * 0.3);
+        const t = ((i * 3 + j) % 4) / 4;
+        b.boxOn(x, 0.2, z, 0.17, 0.4 + t * 0.12, 0.17, C.crop);
+        b.boxOn(x, 0.6 + t * 0.12, z, 0.09, 0.2, 0.09, C.wheat);
+      }
+    }
+  }
+
+  // Dressed-stone boundary rather than a fence.
   for (const sz of [-1, 1]) {
-    b.boxOn(0, 0.5, sz * (half - 0.15), w - 0.3, 0.08, 0.06, postColor);
-    b.boxOn(sz * (half - 0.15), 0.5, 0, 0.06, 0.08, w - 0.3, postColor);
+    b.boxOn(0, 0.12, sz * (half - 0.18), w - 0.3, 0.3, 0.18, C.limestoneDark);
+    b.boxOn(0, 0.42, sz * (half - 0.18), w - 0.3, 0.06, 0.24, C.limestone);
+    b.boxOn(sz * (half - 0.18), 0.12, 0, 0.18, 0.3, w - 0.3, C.limestoneDark);
+    b.boxOn(sz * (half - 0.18), 0.42, 0, 0.24, 0.06, w - 0.3, C.limestone);
   }
-  // Corner store hut.
-  b.boxOn(half - 0.95, 0.12, half - 0.95, 1.1, 0.85, 1.1, s.wall);
-  if (f === 'egypt') b.parapet(half - 0.95, 0.97, half - 0.95, 1.15, 1.15, s.wallDark, 0.16);
-  else tiledRoof(b, s, half - 0.95, 0.97, half - 0.95, 1.15, 1.15, 0.5, 0.12, false);
-  // Water jars.
-  b.column(-half + 0.7, 0.12, half - 0.7, 0.16, 0.2, 0.4, C.terracottaDark, 7);
-  b.column(-half + 1.1, 0.12, half - 0.85, 0.13, 0.17, 0.32, C.terracottaDark, 7);
-  return 1.5;
+
+  // Yard: villa rustica and a parked cart.
+  const yz = half - YARD_DEPTH / 2 - 0.2;
+  b.boxOn(half - 1.2, 0.12, yz, 1.5, 1.05, 1.3, s.wall);
+  b.boxOn(half - 1.2, 0.12, yz, 1.6, 0.28, 1.4, s.wallDark);
+  tiledRoof(b, s, half - 1.2, 1.17, yz, 1.5, 1.3, 0.55, 0.12, true);
+  b.arch(half - 1.2, 0.5, yz - 0.68, 0.28, 0.06, s.trim, 8);
+  b.boxOn(-half + 1.2, 0.34, yz, 1.1, 0.22, 0.6, C.wood);
+  for (const sx of [-1, 1]) {
+    b.cylinder(-half + 1.2 + sx * 0.45, 0.3, yz, 0.3, 0.3, 0.09, C.woodDark, 9, 0, 0, Math.PI / 2);
+  }
+  b.column(-half + 1.2, 0.56, yz, 0.05, 0.05, 0.5, C.woodDark, 5);
+  return 2.1;
 }
 
 /** ---------------------------------------------------------------------------
