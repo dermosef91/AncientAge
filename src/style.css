@@ -529,6 +529,7 @@ button {
 
 .build-fab {
   position: absolute;
+  overflow: hidden;
   right: calc(8px + var(--safe-r));
   bottom: calc(8px + var(--safe-b));
   width: 96px;
@@ -586,6 +587,7 @@ button {
 }
 
 .bcard {
+  position: relative;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--stroke);
@@ -1180,4 +1182,155 @@ button {
   .stat .v {
     font-size: 17px;
   }
+}
+
+/* ------------------------------------------------------- keyboard controls */
+/* Hotkey badges stay hidden until a keyboard-capable device shows up. */
+.hk {
+  display: none;
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--stroke);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 12px;
+  text-align: center;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+.has-keyboard .hk {
+  display: block;
+}
+.build-fab .hk {
+  background: rgba(0, 0, 0, 0.32);
+  border-color: rgba(0, 0, 0, 0.25);
+  color: #3a2a08;
+}
+.desktop-only {
+  display: none;
+}
+.has-keyboard .desktop-only {
+  display: flex;
+}
+.right-rail .desktop-only {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-dim);
+  align-items: center;
+  justify-content: center;
+}
+
+/* control-group strip, sitting above the minimap */
+.groups {
+  position: absolute;
+  left: calc(8px + var(--safe-l));
+  bottom: calc(132px + var(--safe-b));
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  max-width: 150px;
+}
+.groups .group {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  font-size: 10px;
+  line-height: 14px;
+}
+.groups .group b {
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 800;
+}
+.groups .group span {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* controls reference */
+.help {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 18, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+  padding: 16px;
+}
+.help.hidden {
+  display: none;
+}
+.help-inner {
+  width: min(880px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius);
+  padding: 18px 20px 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.help-inner h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.help-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px 26px;
+}
+.help-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.help-row kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.help-inner > button {
+  margin-top: 14px;
+  width: 100%;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font-weight: 700;
 }

@@ -29,7 +29,21 @@ export interface HudCallbacks {
   onToggleMute: () => boolean;
   onMenu: () => void;
   onMinimapPoint: (px: number, py: number) => void;
+  onMinimapCommand: (px: number, py: number) => void;
   onCoachDismiss: () => void;
+  onHelp: () => void;
+}
+
+/**
+ * Grid hotkeys, laid out like the two rows of an Age of Empires command panel.
+ * A panel's buttons claim these in render order, so the letter under a button
+ * is always the key that presses it.
+ */
+export const GRID_KEYS = ['q', 'w', 'e', 'r', 't', 'a', 's', 'd', 'f', 'g'];
+
+function gridBadge(slot: number): string {
+  const k = GRID_KEYS[slot];
+  return k ? `<span class="hk">${k.toUpperCase()}</span>` : '';
 }
 
 export interface Objective {
@@ -85,6 +99,12 @@ export class Hud {
   private minimapRect = { w: 1, h: 1 };
   private lastResValues: Record<string, number> = {};
 
+  /** Buttons reachable by grid hotkey, in render order, per panel. */
+  private buildGrid: HTMLButtonElement[] = [];
+  private selGrid: HTMLButtonElement[] = [];
+  private helpEl!: HTMLElement;
+  private groupsEl!: HTMLElement;
+
   constructor(root: HTMLElement, private cb: HudCallbacks) {
     this.root = root;
     root.innerHTML = this.template();
@@ -107,6 +127,8 @@ export class Hud {
     this.vignette = root.querySelector('.hurt-vignette')!;
     this.fpsEl = root.querySelector('.fps')!;
     this.minimapCanvas = root.querySelector('canvas.minimap')!;
+    this.helpEl = root.querySelector('.help')!;
+    this.groupsEl = root.querySelector('.groups')!;
 
     this.wire();
   }
@@ -142,15 +164,20 @@ export class Hud {
 
       <div class="selection empty"></div>
 
+      <div class="groups"></div>
+
       <div class="right-rail">
         <button class="icon-btn" data-act="army" aria-label="Select army">${icon('army')}</button>
         <button class="icon-btn" data-act="idle" aria-label="Select idle villager">${icon('idle')}<span class="badge" style="display:none">0</span></button>
         <button class="icon-btn" data-act="home" aria-label="Centre on town centre">${icon('home')}</button>
         <button class="icon-btn" data-act="mute" aria-label="Toggle sound">${icon('sound')}</button>
+        <button class="icon-btn desktop-only" data-act="help" aria-label="Controls" title="Controls (F1)">?</button>
       </div>
 
       <div class="build-menu"></div>
-      <button class="build-fab" data-act="build">${icon('build')}<span>Build</span></button>
+      <button class="build-fab" data-act="build">${icon('build')}<span>Build</span><span class="hk">B</span></button>
+
+      ${this.helpTemplate()}
 
       <div class="toasts"></div>
 
@@ -161,6 +188,51 @@ export class Hud {
       </div>
       <div class="fps"></div>
     `;
+  }
+
+  /** The keyboard and mouse reference, opened with F1 or the ? button. */
+  private helpTemplate(): string {
+    const rows: [string, string][][] = [
+      [
+        ['Left click', 'Select · drag a box for many'],
+        ['Shift + left click', 'Add to or remove from the selection'],
+        ['Double click', 'Select every unit of that kind on screen'],
+        ['Right click', 'Move · attack · gather · help build'],
+        ['Right click minimap', 'Send the selection across the map'],
+        ['Middle drag', 'Pan the camera'],
+      ],
+      [
+        ['Screen edge · arrows', 'Scroll the map'],
+        ['Wheel · + −', 'Zoom'],
+        ['Space', 'Centre on your town centre'],
+        ['H', 'Select your town centre'],
+        ['B', 'Open the build menu'],
+        ['. / ,', 'Next / previous idle villager'],
+      ],
+      [
+        ['Q W E R T', 'Top row of the open panel'],
+        ['A S D F G', 'Second row of the open panel'],
+        ['Ctrl + 1…0', 'Assign a control group'],
+        ['1…0', 'Select it · press twice to jump there'],
+        ['Delete', 'Delete the selected units'],
+        ['Esc', 'Cancel · open the menu'],
+      ],
+    ];
+    const cols = rows
+      .map(
+        (col) =>
+          `<div class="help-col">${col
+            .map(([k, v]) => `<div class="help-row"><kbd>${k}</kbd><span>${v}</span></div>`)
+            .join('')}</div>`,
+      )
+      .join('');
+    return `<div class="help hidden">
+      <div class="help-inner">
+        <h3>Controls</h3>
+        <div class="help-cols">${cols}</div>
+        <button data-act="help-close">Close</button>
+      </div>
+    </div>`;
   }
 
   private wire(): void {
@@ -182,22 +254,36 @@ export class Hud {
     });
     on('[data-act="build"]', () => this.cb.onBuildToggle());
     on('[data-act="coach-ok"]', () => this.cb.onCoachDismiss());
+    on('[data-act="help"]', () => this.cb.onHelp());
+    on('[data-act="help-close"]', () => this.cb.onHelp());
 
     const mm = this.root.querySelector<HTMLElement>('.minimap-wrap')!;
-    const handle = (e: PointerEvent) => {
+    mm.addEventListener('contextmenu', (e) => e.preventDefault());
+    const at = (e: PointerEvent): { px: number; py: number } | null => {
       const rect = this.minimapCanvas.getBoundingClientRect();
       this.minimapRect.w = rect.width;
       this.minimapRect.h = rect.height;
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
-      if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-      this.cb.onMinimapPoint(px, py);
+      if (px < 0 || py < 0 || px > rect.width || py > rect.height) return null;
+      return { px, py };
     };
     mm.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      handle(e);
-      const move = (ev: PointerEvent) => handle(ev);
+      const p = at(e);
+      if (!p) return;
+      // Right-click orders the selection there; left-click moves the camera.
+      if (e.button === 2) {
+        this.cb.onMinimapCommand(p.px, p.py);
+        return;
+      }
+      if (e.button !== 0) return;
+      this.cb.onMinimapPoint(p.px, p.py);
+      const move = (ev: PointerEvent) => {
+        const q = at(ev);
+        if (q) this.cb.onMinimapPoint(q.px, q.py);
+      };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
@@ -257,26 +343,39 @@ export class Hud {
     if (sig === this.buildSignature) return;
     this.buildSignature = sig;
 
-    this.buildMenuEl.innerHTML = BUILD_ORDER.map((t) => {
+    this.buildMenuEl.innerHTML = BUILD_ORDER.map((t, i) => {
       const def = BUILDINGS[t];
       const cost = buildingCost(t, p.faction);
       const locked = (def.age ?? 1) > p.age;
-      const poor = !canAfford(p.res, cost);
       const name = t === 'monument' ? FACTIONS[p.faction].name + ' Monument' : def.name;
       return `<button class="bcard ${placing === t ? 'selected' : ''}" data-b="${t}" ${locked ? 'disabled' : ''}>
         ${icon(t)}
         <span class="n">${name}</span>
         <span class="c">${locked ? '<em class="short">Bronze Age</em>' : costHtml(cost, p.res)}</span>
+        ${gridBadge(i)}
       </button>`;
-      void poor;
     }).join('');
 
-    this.buildMenuEl.querySelectorAll<HTMLButtonElement>('.bcard').forEach((btn) => {
+    this.buildGrid = [...this.buildMenuEl.querySelectorAll<HTMLButtonElement>('.bcard')];
+    this.buildGrid.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.cb.onPickBuilding(btn.dataset.b as BuildingTypeId);
       });
     });
+  }
+
+  /**
+   * Presses the panel button a grid key points at. Returns false when the key
+   * lands on nothing, so the caller can leave the browser default alone.
+   */
+  triggerGrid(key: string, buildMenuOpen: boolean): boolean {
+    const slot = GRID_KEYS.indexOf(key);
+    if (slot < 0) return false;
+    const btn = (buildMenuOpen ? this.buildGrid : this.selGrid)[slot];
+    if (!btn || btn.disabled) return false;
+    btn.click();
+    return true;
   }
 
   /** ---------------------------------------------------------------------
@@ -290,6 +389,7 @@ export class Hud {
         this.selectionEl.className = 'selection empty';
         this.selectionEl.innerHTML = '';
         this.dynamicUpdaters = [];
+        this.selGrid = [];
       }
       return;
     }
@@ -312,9 +412,22 @@ export class Hud {
     if (single) {
       if (single.kind === 'building') this.renderBuilding(game, single);
       else this.renderUnit(game, single, alive as Unit[]);
-      return;
+    } else {
+      this.renderGroup(game, alive as Unit[]);
     }
-    this.renderGroup(game, alive as Unit[]);
+    this.captureSelGrid();
+  }
+
+  /**
+   * The command panel's buttons take grid keys in render order. Stamping the
+   * letters here keeps every panel's template free of hotkey bookkeeping.
+   */
+  private captureSelGrid(): void {
+    this.selGrid = [...this.selectionEl.querySelectorAll<HTMLButtonElement>('.sel-actions .act')];
+    this.selGrid.forEach((btn, i) => {
+      const badge = gridBadge(i);
+      if (badge) btn.insertAdjacentHTML('beforeend', badge);
+    });
   }
 
   private renderBuilding(game: Game, b: Building): void {
@@ -583,6 +696,25 @@ export class Hud {
   flashHurt(): void {
     this.vignette.classList.add('on');
     setTimeout(() => this.vignette.classList.remove('on'), 220);
+  }
+
+  setHelpVisible(open: boolean): void {
+    this.helpEl.classList.toggle('hidden', !open);
+  }
+
+  /** Draws the control-group strip; empty groups are simply absent. */
+  setGroups(sizes: Map<number, number>): void {
+    const order = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+    const html = order
+      .filter((n) => (sizes.get(n) ?? 0) > 0)
+      .map((n) => `<div class="group"><b>${n}</b><span>${sizes.get(n)}</span></div>`)
+      .join('');
+    if (this.groupsEl.innerHTML !== html) this.groupsEl.innerHTML = html;
+  }
+
+  /** Reveals the keyboard affordances once a mouse has been seen. */
+  setDesktop(on: boolean): void {
+    this.root.classList.toggle('has-keyboard', on);
   }
 
   setMuted(muted: boolean): void {
