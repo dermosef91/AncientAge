@@ -566,24 +566,184 @@ button {
   position: absolute;
   right: calc(8px + var(--safe-r));
   bottom: calc(78px + var(--safe-b));
-  width: min(430px, calc(100vw - 150px - var(--safe-l) - var(--safe-r)));
-  max-height: min(60vh, 320px);
+  width: min(470px, calc(100vw - 150px - var(--safe-l) - var(--safe-r)));
+  max-height: min(74vh, 520px);
   background: var(--panel);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  padding: 9px;
   pointer-events: auto;
-  overflow-y: auto;
   overscroll-behavior: contain;
   display: none;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 7px;
+  flex-direction: column;
+  overflow: hidden;
 }
 .build-menu.open {
+  display: flex;
+}
+
+/* header */
+.bhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px 9px;
+  border-bottom: 1px solid var(--stroke);
+}
+.bhead .ico {
+  width: 26px;
+  height: 26px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+.bhead h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.bhead span {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+/* tabs + grid */
+.bbody {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.btabs {
+  flex: 0 0 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 6px 8px 8px;
+  border-right: 1px solid var(--stroke);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.btabs::-webkit-scrollbar {
+  display: none;
+}
+.btab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s;
+}
+.btab .ico {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.btab.on {
+  background: linear-gradient(160deg, rgba(233, 196, 106, 0.28), rgba(201, 151, 60, 0.16));
+  border-color: rgba(233, 196, 106, 0.4);
+  color: var(--text);
+}
+.bgrid {
+  flex: 1 1 auto;
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  align-content: start;
+  gap: 7px;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* detail footer */
+.bfoot {
+  border-top: 1px solid var(--stroke);
+  padding: 9px 11px 11px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.bdetail {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.bdetail-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bdetail-body h4 {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.bdetail-body p {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.bdetail-cost {
+  display: flex;
+  gap: 9px;
+  font-size: 11px;
+}
+.bdetail-cost em {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.bdetail-cost em.short {
+  color: var(--bad);
+}
+.bdetail-cost .ico {
+  width: 14px;
+  height: 14px;
+}
+.bdetail-art {
+  flex: 0 0 auto;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--stroke);
+}
+.bdetail-art .ico {
+  width: 40px;
+  height: 40px;
+}
+.bplace {
+  margin-top: 9px;
+  width: 100%;
+  height: 40px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #e9c46a, #c9973c);
+  color: #24190a;
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: 0.3px;
+  border: none;
+}
+.bplace:disabled {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-dim);
+}
+.bplace:active:not(:disabled) {
+  transform: scale(0.985);
 }
 
 .bcard {
@@ -638,9 +798,40 @@ button {
 .bcard:disabled {
   opacity: 0.4;
 }
+.bcard.focus:not(:disabled) {
+  border-color: var(--stroke-strong);
+  background: rgba(255, 255, 255, 0.13);
+}
 .bcard.selected {
   border-color: var(--gold);
   background: rgba(233, 196, 106, 0.19);
+}
+
+/* On a phone the panel becomes a bottom sheet and the tabs run across it. */
+@media (max-width: 620px) {
+  .build-menu {
+    left: calc(6px + var(--safe-l));
+    right: calc(6px + var(--safe-r));
+    width: auto;
+    max-height: 68vh;
+  }
+  .bbody {
+    flex-direction: column;
+  }
+  .btabs {
+    flex: 0 0 auto;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--stroke);
+    padding: 7px 8px;
+    overflow-x: auto;
+  }
+  .btab {
+    flex: 0 0 auto;
+  }
+  .bdetail-body p {
+    display: none;
+  }
 }
 
 /* ----------------------------------------------------------------- toasts */

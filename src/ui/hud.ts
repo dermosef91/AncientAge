@@ -41,6 +41,26 @@ export interface HudCallbacks {
  */
 export const GRID_KEYS = ['q', 'w', 'e', 'r', 't', 'a', 's', 'd', 'f', 'g'];
 
+/**
+ * The build menu is split into tabs. The top hotkey row picks a building, the
+ * second row picks a tab, so slot 5 onwards belongs to the category strip.
+ */
+const CATEGORY_SLOT = 5;
+
+interface BuildCategory {
+  id: string;
+  name: string;
+  icon: string;
+  members: BuildingTypeId[];
+}
+
+const BUILD_CATEGORIES: BuildCategory[] = [
+  { id: 'economy', name: 'Economy', icon: 'house', members: ['house', 'farm', 'storehouse', 'dock'] },
+  { id: 'military', name: 'Military', icon: 'barracks', members: ['barracks', 'range'] },
+  { id: 'defenses', name: 'Defenses', icon: 'tower', members: ['tower', 'wall'] },
+  { id: 'civic', name: 'Civic', icon: 'monument', members: ['monument', 'towncenter'] },
+];
+
 function gridBadge(slot: number): string {
   const k = GRID_KEYS[slot];
   return k ? `<span class="hk">${k.toUpperCase()}</span>` : '';
@@ -102,6 +122,8 @@ export class Hud {
   /** Buttons reachable by grid hotkey, in render order, per panel. */
   private buildGrid: HTMLButtonElement[] = [];
   private selGrid: HTMLButtonElement[] = [];
+  private buildCategory = BUILD_CATEGORIES[0].id;
+  private buildFocus: BuildingTypeId | null = null;
   private helpEl!: HTMLElement;
   private groupsEl!: HTMLElement;
 
@@ -335,33 +357,112 @@ export class Hud {
    * ------------------------------------------------------------------- */
   private renderBuildMenu(game: Game, placing: BuildingTypeId | null): void {
     const p = game.player(0);
-    const sig = BUILD_ORDER.map((t) => {
-      const cost = buildingCost(t, p.faction);
-      const ok = canAfford(p.res, cost) && (BUILDINGS[t].age ?? 1) <= p.age;
-      return `${t}${ok ? 1 : 0}${placing === t ? 's' : ''}`;
-    }).join(',');
+    const cat = BUILD_CATEGORIES.find((c) => c.id === this.buildCategory) ?? BUILD_CATEGORIES[0];
+
+    // Whatever is being placed is what the detail panel talks about; otherwise
+    // the last card the player pointed at, falling back to the first on the tab.
+    if (placing) this.buildFocus = placing;
+    if (!this.buildFocus || !cat.members.includes(this.buildFocus)) this.buildFocus = cat.members[0];
+    const focus = this.buildFocus;
+
+    const sig = [
+      cat.id,
+      focus,
+      placing ?? '',
+      p.age,
+      ...BUILD_ORDER.map((t) => (canAfford(p.res, buildingCost(t, p.faction)) ? 1 : 0)),
+    ].join(',');
     if (sig === this.buildSignature) return;
     this.buildSignature = sig;
 
-    this.buildMenuEl.innerHTML = BUILD_ORDER.map((t, i) => {
-      const def = BUILDINGS[t];
-      const cost = buildingCost(t, p.faction);
-      const locked = (def.age ?? 1) > p.age;
-      const name = t === 'monument' ? FACTIONS[p.faction].name + ' Monument' : def.name;
-      return `<button class="bcard ${placing === t ? 'selected' : ''}" data-b="${t}" ${locked ? 'disabled' : ''}>
-        ${icon(t)}
-        <span class="n">${name}</span>
-        <span class="c">${locked ? '<em class="short">Bronze Age</em>' : costHtml(cost, p.res)}</span>
-        ${gridBadge(i)}
-      </button>`;
-    }).join('');
+    const label = (t: BuildingTypeId): string =>
+      t === 'monument' ? `${FACTIONS[p.faction].name} Monument` : BUILDINGS[t].name;
 
-    this.buildGrid = [...this.buildMenuEl.querySelectorAll<HTMLButtonElement>('.bcard')];
-    this.buildGrid.forEach((btn) => {
+    const cards = cat.members
+      .map((t, i) => {
+        const def = BUILDINGS[t];
+        const cost = buildingCost(t, p.faction);
+        const locked = (def.age ?? 1) > p.age;
+        const classes = ['bcard'];
+        if (placing === t) classes.push('selected');
+        if (focus === t) classes.push('focus');
+        return `<button class="${classes.join(' ')}" data-b="${t}" ${locked ? 'disabled' : ''}>
+          ${icon(t)}
+          <span class="n">${label(t)}</span>
+          <span class="c">${locked ? '<em class="short">Bronze Age</em>' : costHtml(cost, p.res)}</span>
+          ${gridBadge(i)}
+        </button>`;
+      })
+      .join('');
+
+    const tabs = BUILD_CATEGORIES.map(
+      (c, i) => `<button class="btab ${c.id === cat.id ? 'on' : ''}" data-cat="${c.id}">
+        ${icon(c.icon as never)}<span>${c.name}</span>${gridBadge(CATEGORY_SLOT + i)}
+      </button>`,
+    ).join('');
+
+    const fdef = BUILDINGS[focus];
+    const fcost = buildingCost(focus, p.faction);
+    const flocked = (fdef.age ?? 1) > p.age;
+    const fpoor = !canAfford(p.res, fcost);
+    const detail = `<div class="bdetail">
+        <div class="bdetail-body">
+          <h4>${label(focus)}</h4>
+          <p>${fdef.blurb}</p>
+          <div class="bdetail-cost">${costHtml(fcost, p.res)}</div>
+        </div>
+        <div class="bdetail-art">${icon(focus)}</div>
+      </div>
+      <button class="bplace" data-place="${focus}" ${flocked || fpoor ? 'disabled' : ''}>
+        ${flocked ? 'Requires the Bronze Age' : fpoor ? 'Not enough resources' : 'Place Building'}
+      </button>`;
+
+    this.buildMenuEl.innerHTML = `
+      <div class="bhead">
+        ${icon('build')}
+        <div>
+          <h3>Build</h3>
+          <span>Select a building to place it on the map</span>
+        </div>
+      </div>
+      <div class="bbody">
+        <div class="btabs">${tabs}</div>
+        <div class="bgrid">${cards}</div>
+      </div>
+      <div class="bfoot">${detail}</div>`;
+
+    // Hotkey slots: the top row picks a building, the second row picks a tab.
+    const cardEls = [...this.buildMenuEl.querySelectorAll<HTMLButtonElement>('.bcard')];
+    const tabEls = [...this.buildMenuEl.querySelectorAll<HTMLButtonElement>('.btab')];
+    this.buildGrid = [];
+    cardEls.forEach((el, i) => (this.buildGrid[i] = el));
+    tabEls.forEach((el, i) => (this.buildGrid[CATEGORY_SLOT + i] = el));
+
+    for (const btn of cardEls) {
+      const type = btn.dataset.b as BuildingTypeId;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.cb.onPickBuilding(btn.dataset.b as BuildingTypeId);
+        this.buildFocus = type;
+        this.cb.onPickBuilding(type);
       });
+      // Pointing at a card is enough to read about it.
+      btn.addEventListener('pointerenter', () => {
+        if (this.buildFocus === type) return;
+        this.buildFocus = type;
+        this.buildSignature = '';
+      });
+    }
+    for (const btn of tabEls) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.buildCategory = btn.dataset.cat!;
+        this.buildFocus = null;
+        this.buildSignature = '';
+      });
+    }
+    this.buildMenuEl.querySelector<HTMLButtonElement>('.bplace')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.cb.onPickBuilding(focus);
     });
   }
 
