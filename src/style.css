@@ -978,25 +978,56 @@ button {
   line-height: 1.05;
 }
 .title-block .kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   font-size: 11px;
   letter-spacing: 4px;
   text-transform: uppercase;
   color: var(--gold);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+}
+.title-block .kicker i {
+  width: clamp(24px, 8vw, 74px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.75));
+}
+.title-block .kicker i:last-child {
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.75), transparent);
 }
 .title-block h1 {
   margin: 0;
-  font-size: clamp(28px, 5.4vw, 48px);
+  font-size: clamp(30px, 6.4vw, 62px);
   font-weight: 800;
-  letter-spacing: 1.4px;
-  background: linear-gradient(180deg, #fff6e2, #e0b96b);
+  letter-spacing: clamp(2px, 0.7vw, 7px);
+  background: linear-gradient(180deg, #fff6e2, #e0b96b 58%, #c08f34);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 3px 22px rgba(233, 196, 106, 0.22);
+  text-shadow: 0 3px 26px rgba(233, 196, 106, 0.26);
+}
+.title-block .rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 7px;
+}
+.title-block .rule i {
+  width: clamp(40px, 14vw, 150px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.6));
+}
+.title-block .rule i:last-child {
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.6), transparent);
+}
+.title-block .rule b {
+  color: var(--gold);
+  font-size: 9px;
 }
 .title-block p {
-  margin: 6px 0 0;
+  margin: 9px 0 0;
   color: var(--text-dim);
   font-size: 13.5px;
 }
@@ -1004,75 +1035,187 @@ button {
 .faction-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 14px;
   width: 100%;
-}
-@media (max-width: 620px) {
-  .faction-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 7px;
-  }
+  align-items: stretch;
 }
 
+/* ---------------------------------------------------------- faction cards */
 .fcard {
-  border-radius: 15px;
-  border: 1.5px solid var(--stroke);
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
-  padding: 12px 11px;
+  --fc: var(--gold);
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(170deg, rgba(24, 32, 44, 0.92), rgba(12, 17, 24, 0.94));
+  padding: 0;
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: transform 0.14s, border-color 0.16s, background 0.18s;
+  transition: transform 0.16s, border-color 0.18s, box-shadow 0.2s;
   position: relative;
   overflow: hidden;
-  min-height: 44px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.38);
 }
-.fcard::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 4px;
-  background: var(--fc, var(--gold));
-}
-.fcard:active {
-  transform: scale(0.98);
-}
-.fcard.selected {
-  border-color: var(--fc, var(--gold));
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-  box-shadow: 0 0 0 1px var(--fc, var(--gold)) inset, 0 8px 26px rgba(0, 0, 0, 0.4);
-}
-.fcard h3 {
-  margin: 2px 0 0;
-  font-size: clamp(16px, 2.4vw, 21px);
-  letter-spacing: 0.6px;
-}
-.fcard .tag {
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--fc, var(--gold));
-  font-weight: 800;
-}
-.fcard .row {
+.fcard-head {
   display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  line-height: 1.35;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 10px 9px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fc) 30%, transparent), transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
-.fcard .row .ico {
-  width: 15px;
-  height: 15px;
-  color: var(--fc, var(--gold));
-  margin-top: 1px;
+.fcard-head .ico {
+  width: 19px;
+  height: 19px;
+  color: var(--fc);
   flex: 0 0 auto;
 }
-.fcard .row b {
+.fcard h3 {
+  margin: 0;
+  font-size: clamp(13px, 2.1vw, 20px);
+  font-weight: 800;
+  letter-spacing: clamp(0.5px, 0.2vw, 2px);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* scene art */
+.fart {
+  position: relative;
+  display: block;
+  aspect-ratio: 200 / 132;
+}
+/* The scene is clipped here so the crest can hang over the edge below. */
+.fart-clip {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.fart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.fcrest {
+  position: absolute;
+  left: 50%;
+  bottom: -17px;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(170deg, #22303f, #131b25);
+  border: 1.5px solid var(--fc);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+}
+.fcrest .ico {
+  width: 18px;
+  height: 18px;
+  color: var(--fc);
+}
+
+/* bonus list */
+.fperks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px 11px 13px;
+  flex: 1 1 auto;
+}
+.fperk {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.fperk-ico {
+  flex: 0 0 auto;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fc) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fc) 45%, transparent);
+}
+.fperk-ico .ico {
+  width: 12px;
+  height: 12px;
+  color: var(--fc);
+}
+.fperk b {
   color: var(--text);
   font-weight: 700;
+}
+
+.fcard:active {
+  transform: scale(0.99);
+}
+.fcard.selected {
+  border-color: var(--fc);
+  transform: translateY(-4px);
+  box-shadow:
+    0 0 0 1px var(--fc) inset,
+    0 0 26px color-mix(in srgb, var(--fc) 38%, transparent),
+    0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------------------------------------ hint strip */
+.hint-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 20px;
+  margin-top: 2px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.hint-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.hint-strip .ico {
+  width: 14px;
+  height: 14px;
+  color: var(--gold);
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .faction-grid {
+    gap: 8px;
+  }
+  .fperks {
+    padding: 20px 7px 10px;
+    gap: 6px;
+  }
+  .fperk {
+    font-size: 10px;
+    gap: 6px;
+  }
+  .fperk-ico {
+    width: 17px;
+    height: 17px;
+  }
+  .fperk-ico .ico {
+    width: 10px;
+    height: 10px;
+  }
+  .hint-strip {
+    gap: 4px 12px;
+    font-size: 9.5px;
+  }
 }
 
 .big-btn {
@@ -1093,6 +1236,21 @@ button {
 }
 .big-btn:active {
   transform: scale(0.97);
+}
+.big-btn.ornate {
+  background: linear-gradient(180deg, #f3d688, #d9a63f 52%, #b8871f);
+  color: #2a1d05;
+  border: 1.5px solid rgba(255, 240, 200, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 10px 30px rgba(217, 166, 63, 0.3);
+  letter-spacing: 1px;
+  min-width: min(460px, 82vw);
+  justify-content: center;
+}
+.big-btn.ornate .star {
+  font-size: 15px;
+  color: #3a2a06;
 }
 .big-btn.ghost {
   background: rgba(255, 255, 255, 0.09);

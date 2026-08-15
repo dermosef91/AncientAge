@@ -54,7 +54,7 @@ whichever you reach for.
 | Key | |
 |---|---|
 | `Q` `W` `E` `R` `T` | top row of whichever panel is open |
-| `A` `S` `D` `F` `G` | second row of that panel |
+| `A` `S` `D` `F` `G` | second row of that panel — the build menu's category tabs |
 | `Shift` + `1`…`0` | assign a control group (`Ctrl` also works where the browser allows it) |
 | `1`…`0` | select that group; press twice to jump to it |
 | `H` | select your town centre |
@@ -64,8 +64,9 @@ whichever you reach for.
 | `F1` or `?` | the full controls reference |
 
 The grid hotkeys follow the panel: with the town centre selected `Q` trains a villager,
-and with the build menu open `Q` picks a house. Every button carries its letter, so the
-key under a button is always the one that presses it.
+and with the build menu open `Q` picks the first building on the open tab while `S`
+switches to Military. Every button carries its letter, so the key under a button is
+always the one that presses it.
 
 The right-hand rail selects your whole army, cycles idle villagers, recentres on the
 town centre and mutes sound. Left-click or drag the minimap to move the camera;
