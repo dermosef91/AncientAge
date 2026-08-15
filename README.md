@@ -15,6 +15,22 @@ npm run preview  # serve the built bundle
 npm run typecheck
 ```
 
+## Deploying
+
+The build is a fully static bundle — no server, no runtime asset fetches — so it can be
+hosted anywhere that serves files. `vite.config.ts` sets `base: './'`, so the bundle
+works from a subdirectory as well as from a domain root.
+
+`.github/workflows/deploy.yml` builds every push (typecheck + build) and publishes the
+default branch to GitHub Pages. To turn it on once, in the repository: **Settings →
+Pages → Build and deployment → Source: GitHub Actions**. The next push to the default
+branch publishes to `https://<owner>.github.io/<repo>/`; the run's deploy job prints the
+live URL.
+
+Any other static host works the same way — build with `npm run build` and serve `dist/`
+(Netlify, Vercel, Cloudflare Pages: build command `npm run build`, output directory
+`dist`).
+
 ## Playing
 
 | | Touch | Mouse / keyboard |
