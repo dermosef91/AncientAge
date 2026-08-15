@@ -13,6 +13,18 @@ import type { Building, BuildingTypeId, ResourceKind, TechId, Unit, UnitTypeId }
 
 type Phase = 'boom' | 'army' | 'push';
 
+/**
+ * Aggression dial. The opponent is meant to give a new player room to build a
+ * settlement before it comes knocking, so the first push lands late, the gaps
+ * between waves stay long, and each wave wants a real army behind it.
+ */
+const FIRST_ATTACK_TIME = 340;
+const ATTACK_GAP_START = 150;
+const ATTACK_GAP_MIN = 85;
+const WAVE_SIZES = [6, 8, 10, 12, 14, 16, 18];
+/** Seconds between AI decisions; a longer gap makes it visibly less twitchy. */
+const THINK_INTERVAL = 0.95;
+
 interface WorkerPlan {
   food: number;
   wood: number;
@@ -61,7 +73,7 @@ export class SkirmishAI {
       x: this.homeX + ((this.enemyBaseX - this.homeX) / d) * 12,
       z: this.homeZ + ((this.enemyBaseZ - this.homeZ) / d) * 12,
     };
-    this.nextAttackTime = 225 / this.difficulty;
+    this.nextAttackTime = FIRST_ATTACK_TIME / this.difficulty;
   }
 
   update(dt: number): void {
@@ -74,7 +86,7 @@ export class SkirmishAI {
       this.assignWorkers();
     }
     if (this.think <= 0) {
-      this.think = 0.7;
+      this.think = THINK_INTERVAL;
       this.research();
       this.construction();
       this.economy();
@@ -468,14 +480,15 @@ export class SkirmishAI {
     // Escalating attack waves.
     if (g.time >= this.nextAttackTime && this.armyMode !== 'attack') {
       // The longer a wave is overdue, the smaller a force it will commit.
-      const overdue = Math.floor((g.time - this.nextAttackTime) / 25);
+      const overdue = Math.floor((g.time - this.nextAttackTime) / 40);
       const needed = Math.max(3, this.waveSize() - overdue);
       if (army.length >= needed) {
         this.waveNumber++;
         this.armyMode = 'attack';
         this.attackTargetId = 0;
         this.retargetTimer = 0;
-        this.nextAttackTime = g.time + Math.max(55, 105 - this.waveNumber * 6) / this.difficulty;
+        this.nextAttackTime =
+          g.time + Math.max(ATTACK_GAP_MIN, ATTACK_GAP_START - this.waveNumber * 5) / this.difficulty;
         this.phase = 'push';
       } else {
         this.phase = 'army';
@@ -521,8 +534,8 @@ export class SkirmishAI {
   private waveSize(): number {
     // First push is small and early enough to punish a greedy player, then
     // each wave demands a bigger commitment.
-    const base = [4, 6, 8, 10, 12, 14, 16][Math.min(this.waveNumber, 6)];
-    return Math.max(3, Math.round(base / this.difficulty));
+    const base = WAVE_SIZES[Math.min(this.waveNumber, WAVE_SIZES.length - 1)];
+    return Math.max(4, Math.round(base / this.difficulty));
   }
 
   private findIntruder(): Unit | null {

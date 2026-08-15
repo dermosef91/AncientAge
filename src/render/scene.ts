@@ -544,6 +544,16 @@ export class SceneRenderer {
         bob += jab * 0.04;
       }
 
+      // Working: a repeating hammer stroke, so a building site reads as busy.
+      if (u.state === 'build' || u.state === 'gather') {
+        const rate = u.state === 'build' ? 6.4 : 4.6;
+        const swing = Math.sin(this.time * rate + u.phase * 3.1);
+        const stroke = Math.max(0, swing);
+        lean += stroke * (u.state === 'build' ? 0.34 : 0.26);
+        bob += stroke * 0.05;
+        roll += swing * 0.06;
+      }
+
       let tilt = 0;
       if (u.state === 'dead') {
         const k = clamp(1 - u.deathTimer / 1.4, 0, 1);
@@ -645,6 +655,12 @@ export class SceneRenderer {
     const seen = new Set<number>();
     let scaffoldUsed = 0;
 
+    // Sites with a villager actually working them animate; abandoned ones rest.
+    const activeSites = new Set<number>();
+    for (const u of game.units) {
+      if (u.state === 'build' && u.siteId) activeSites.add(u.siteId);
+    }
+
     for (const b of game.buildings) {
       seen.add(b.id);
       const faction = game.player(b.owner).faction;
@@ -664,10 +680,17 @@ export class SceneRenderer {
       let sy = 1;
       let sxz = 1;
       let sink = 0;
+      const working = !b.complete && activeSites.has(b.id);
       if (!b.complete) {
         const p = smoothstep(0, 1, b.progress);
         sy = 0.06 + 0.94 * p;
         sxz = 0.86 + 0.14 * p;
+        // Each hammer stroke settles the frame a little; idle sites sit still.
+        if (working) {
+          const beat = Math.sin(this.time * 6.4 + b.phase);
+          sy *= 1 + Math.max(0, beat) * 0.035;
+          sxz *= 1 - Math.max(0, beat) * 0.012;
+        }
       } else if (vis.completeT < 1) {
         vis.completeT = Math.min(1, vis.completeT + 0.06);
         const pop = Math.sin(vis.completeT * Math.PI) * 0.07;
@@ -699,11 +722,14 @@ export class SceneRenderer {
       }
       pool.setColor(vis.slot, _color);
 
-      // Scaffolding while under construction.
+      // Scaffolding while under construction. It climbs with the building and
+      // sways while someone is actually swinging a hammer at it.
       if (!b.complete && !b.dead && scaffoldUsed < this.scaffoldPool.capacity) {
         const r = (b.size * TILE) / 2 + 0.35;
-        this.scaffoldPool.place(scaffoldUsed, b.x, y, b.z, 0.3, r, 1 + b.size * 0.35, r);
-        this.scaffoldPool.setColor(scaffoldUsed, 0xffffff);
+        const climb = 1 + b.size * 0.35 * (0.55 + 0.45 * smoothstep(0, 1, b.progress));
+        const sway = working ? Math.sin(this.time * 3.2 + b.phase) * 0.045 : 0;
+        this.scaffoldPool.place(scaffoldUsed, b.x, y, b.z, 0.3 + sway, r, climb, r);
+        this.scaffoldPool.setColor(scaffoldUsed, working ? 0xfff0d2 : 0xffffff);
         scaffoldUsed++;
       }
 
@@ -943,6 +969,31 @@ export class SceneRenderer {
         gravity: -1.1,
         up: 0.5,
         spread: 0.12,
+      });
+      budget--;
+    }
+    this.emitBuildDust();
+  }
+
+  /** Chips and dust thrown off wherever a villager is raising a building. */
+  private emitBuildDust(): void {
+    const game = this.game;
+    let budget = 2;
+    for (const u of game.units) {
+      if (budget <= 0) break;
+      if (u.state !== 'build' || !u.siteId) continue;
+      if (Math.random() > 0.3) continue;
+      const site = game.entity(u.siteId);
+      if (!site || site.kind !== 'building' || site.complete) continue;
+      const y = game.grid.heightAt(u.x, u.z);
+      this.particles.emit('dust', u.x, y + 0.35, u.z, 1, {
+        color: C.dust,
+        speed: 0.5,
+        size: 0.11,
+        life: 0.5,
+        gravity: -1.6,
+        up: 1.1,
+        spread: 0.3,
       });
       budget--;
     }

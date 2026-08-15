@@ -14,6 +14,13 @@ import {
 import { NODE_AMOUNT, NODE_RESOURCE } from './data';
 import type { NodeTypeId, ResourceNode } from './types';
 
+/**
+ * Lowest a land tile may sit. The water mesh is a single plane at y=0.02
+ * covering the whole map, so anything below this would show sea through the
+ * middle of the island.
+ */
+const LAND_MIN_HEIGHT = 0.16;
+
 export interface Decoration {
   kind: 'palm' | 'olive' | 'cypress' | 'rock' | 'grass' | 'reed' | 'ruin';
   x: number;
@@ -127,11 +134,12 @@ export function generateMap(seed: number): GeneratedMap {
     return Math.min(gz - northCoast, gx - westCoast);
   };
 
-  // Start positions: player south-west, enemy north-east. Both within reach of
-  // the shoreline so docks are meaningful for either side.
+  // Start positions: player south-west, enemy north-east, pushed out towards
+  // opposite corners so neither settlement is under early pressure. Both stay
+  // within reach of the shoreline so docks are meaningful for either side.
   const starts = [
-    { x: grid.worldX(20), z: grid.worldZ(52) },
-    { x: grid.worldX(53), z: grid.worldZ(21) },
+    { x: grid.worldX(18), z: grid.worldZ(59) },
+    { x: grid.worldX(59), z: grid.worldZ(18) },
   ];
 
   const startTiles = starts.map((s) => ({ gx: grid.tileX(s.x), gz: grid.tileZ(s.z) }));
@@ -234,6 +242,15 @@ export function generateMap(seed: number): GeneratedMap {
         }
       } else run = 0;
     }
+  }
+
+  // The water plane spans the whole map, so any land that dips below it would
+  // be flooded from the inside. Lift every land tile clear of the waterline
+  // after all the height passes have had their say.
+  for (let i = 0; i < grid.height.length; i++) {
+    const t = grid.terrain[i];
+    if (t === T_DEEP || t === T_SHALLOW) continue;
+    if (grid.height[i] < LAND_MIN_HEIGHT) grid.height[i] = LAND_MIN_HEIGHT;
   }
 
   // --- Resource placement ---------------------------------------------------
