@@ -22,7 +22,7 @@ import {
   refundCost,
 } from './data';
 
-import { generateMap, type Decoration } from './mapgen';
+import { generateMap, type Biome, type Decoration } from './mapgen';
 import type {
   Building,
   BuildingTypeId,
@@ -99,6 +99,7 @@ export class Game {
   readonly grid: Grid;
   readonly pathfinder: PathFinder;
   readonly decorations: Decoration[];
+  readonly biome: Biome;
   readonly starts: { x: number; z: number }[];
   readonly seed: number;
 
@@ -125,10 +126,12 @@ export class Game {
 
   constructor(playerFaction: FactionId, enemyFaction: FactionId, seed = Math.floor(Math.random() * 1e9)) {
     this.seed = seed;
-    const map = generateMap(seed);
+    // The island takes after the player's homeland.
+    const map = generateMap(seed, playerFaction);
     this.grid = map.grid;
     this.pathfinder = new PathFinder(this.grid);
     this.decorations = map.decorations;
+    this.biome = map.biome;
     this.starts = map.starts;
     this.nodes = map.nodes;
     for (const n of this.nodes) this.nodeById.set(n.id, n);
