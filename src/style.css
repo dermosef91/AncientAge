@@ -108,32 +108,39 @@ button {
 .res-strip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: var(--panel);
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  padding: 5px 10px;
+  gap: 2px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.22);
+  border-radius: 16px;
+  padding: 7px 14px;
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+/* Divider before the population count, as in the reference strip. */
+.res-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 9px;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .res {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 7px;
+  gap: 7px;
+  padding: 2px 9px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: 800;
+  font-size: 16px;
   letter-spacing: 0.2px;
   white-space: nowrap;
   border-radius: 9px;
   transition: background 0.25s;
 }
 .res .ico {
-  width: 19px;
-  height: 19px;
+  width: 21px;
+  height: 21px;
 }
 .res.flash {
   background: rgba(233, 196, 106, 0.22);
@@ -142,71 +149,102 @@ button {
   color: var(--bad);
 }
 .res .val {
-  min-width: 2.1em;
+  min-width: 1.9em;
 }
 
+/* age medallion + menu */
+.age-cluster {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
 .age-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--panel);
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  padding: 6px 12px;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.22);
+  border-radius: 16px;
+  padding: 6px 16px 6px 7px;
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.age-medal {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #3a4a5e, #141c26);
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 0 8px rgba(233, 196, 106, 0.3);
+}
+.age-medal b {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--gold);
 }
 .age-badge .age-text {
   display: flex;
   flex-direction: column;
   line-height: 1.15;
-  text-align: right;
 }
 .age-badge .age-name {
-  font-weight: 700;
-  font-size: 14px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 .age-badge .clock {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 
 .icon-btn {
+  position: relative;
   width: var(--tap);
   height: var(--tap);
   min-width: var(--tap);
-  border-radius: 13px;
-  background: var(--panel);
-  border: 1px solid var(--stroke);
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.94), rgba(13, 19, 27, 0.96));
+  border: 1.5px solid rgba(233, 196, 106, 0.3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.42);
   transition: transform 0.12s, background 0.15s, border-color 0.15s;
 }
 .icon-btn .ico {
-  width: 24px;
-  height: 24px;
+  width: 23px;
+  height: 23px;
   color: var(--text);
 }
 .icon-btn:active {
   transform: scale(0.93);
-  background: var(--panel-light);
+  border-color: var(--gold);
 }
 .icon-btn.on {
   border-color: var(--gold);
   background: rgba(233, 196, 106, 0.2);
 }
+/* The menu sits square-ish against the age plate. */
+.menu-btn {
+  border-radius: 16px;
+  height: auto;
+  align-self: stretch;
+}
 .icon-btn .badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 19px;
-  height: 19px;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
   border-radius: 10px;
   background: var(--gold);
   color: #20160a;
@@ -216,25 +254,23 @@ button {
   align-items: center;
   justify-content: center;
   padding: 0 5px;
-}
-.icon-btn {
-  position: relative;
+  border: 1.5px solid rgba(13, 19, 27, 0.85);
 }
 
 /* ------------------------------------------------------------- objectives */
 .objectives {
   position: absolute;
-  top: calc(58px + var(--safe-t));
+  top: calc(66px + var(--safe-t));
   left: calc(8px + var(--safe-l));
-  width: min(258px, 40vw);
-  background: var(--panel);
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  padding: 8px 11px;
+  width: min(268px, 42vw);
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.9), rgba(13, 19, 27, 0.92));
+  border: 1px solid rgba(233, 196, 106, 0.2);
+  border-radius: 14px;
+  padding: 10px 14px 11px;
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
   font-size: 13px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
   transition: opacity 0.3s;
 }
 .objectives.hidden {
@@ -242,19 +278,55 @@ button {
   pointer-events: none;
 }
 .objectives h4 {
-  margin: 0 0 5px;
+  margin: 0;
   font-size: 11px;
-  letter-spacing: 0.9px;
+  letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--gold);
+  font-weight: 800;
+}
+/* Diamond rule under the heading. */
+.obj-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 6px;
+}
+.obj-rule i {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.5), transparent);
+}
+.obj-rule i:first-child {
+  width: 14px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.5));
+}
+.obj-rule i:last-child {
+  flex: 1 1 auto;
+}
+.obj-rule b {
+  color: var(--gold);
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.85;
 }
 .obj-item {
   display: flex;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 8px;
-  padding: 2px 0;
+  padding: 3px 0;
   color: var(--text);
   line-height: 1.35;
+}
+.obj-item .bullet {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transform: translateY(-2px);
+}
+.obj-item span:not(.dot) {
+  flex: 1 1 auto;
 }
 .obj-item .dot {
   color: var(--info);
@@ -263,7 +335,12 @@ button {
 }
 .obj-item.done {
   color: var(--text-dim);
+}
+.obj-item.done span:not(.dot) {
   text-decoration: line-through;
+}
+.obj-item.done .bullet {
+  background: var(--good);
 }
 .obj-item.done .dot {
   color: var(--good);
@@ -274,15 +351,15 @@ button {
   position: absolute;
   left: calc(8px + var(--safe-l));
   bottom: calc(8px + var(--safe-b));
-  width: 116px;
-  height: 116px;
-  border-radius: 50%;
-  padding: 5px;
-  background: var(--panel);
-  border: 1px solid var(--stroke);
+  width: 152px;
+  height: 152px;
+  border-radius: 14px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.24);
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
   pointer-events: auto;
   touch-action: none;
 }
@@ -290,8 +367,27 @@ button {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: 50%;
+  border-radius: 9px;
   background: #17222c;
+}
+/* Corner button, the way the reference frames its map. */
+.mm-expand {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(11, 16, 23, 0.72);
+  border: 1px solid rgba(233, 196, 106, 0.3);
+}
+.mm-expand .ico {
+  width: 14px;
+  height: 14px;
+  color: var(--gold);
 }
 .minimap-wrap .compass {
   position: absolute;
@@ -1580,7 +1676,7 @@ button {
 .groups {
   position: absolute;
   left: calc(8px + var(--safe-l));
-  bottom: calc(132px + var(--safe-b));
+  bottom: calc(168px + var(--safe-b));
   display: flex;
   gap: 5px;
   flex-wrap: wrap;

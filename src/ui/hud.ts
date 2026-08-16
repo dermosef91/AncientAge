@@ -35,17 +35,16 @@ export interface HudCallbacks {
 }
 
 /**
- * Grid hotkeys, laid out like the two rows of an Age of Empires command panel.
- * A panel's buttons claim these in render order, so the letter under a button
- * is always the key that presses it.
+ * Panel hotkeys. W, A, S and D belong to the camera, so the rows step around
+ * them: the top row of a panel takes Q E R T Y and the build menu's category
+ * tabs take Z X C V underneath.
  */
-export const GRID_KEYS = ['q', 'w', 'e', 'r', 't', 'a', 's', 'd', 'f', 'g'];
+const PANEL_KEYS = ['q', 'e', 'r', 't', 'y'];
+const TAB_KEYS = ['z', 'x', 'c', 'v'];
+export const GRID_KEYS = [...PANEL_KEYS, ...TAB_KEYS];
 
-/**
- * The build menu is split into tabs. The top hotkey row picks a building, the
- * second row picks a tab, so slot 5 onwards belongs to the category strip.
- */
-const CATEGORY_SLOT = 5;
+/** Slot at which the category strip starts. */
+const CATEGORY_SLOT = PANEL_KEYS.length;
 
 interface BuildCategory {
   id: string;
@@ -100,6 +99,7 @@ export class Hud {
 
   private resEls = new Map<string, HTMLElement>();
   private ageName!: HTMLElement;
+  private ageNumeral!: HTMLElement;
   private clock!: HTMLElement;
   private objectivesEl!: HTMLElement;
   private selectionEl!: HTMLElement;
@@ -136,6 +136,7 @@ export class Hud {
       if (el) this.resEls.set(k, el);
     }
     this.ageName = root.querySelector('.age-name')!;
+    this.ageNumeral = root.querySelector('.age-numeral')!;
     this.clock = root.querySelector('.clock')!;
     this.objectivesEl = root.querySelector('.objectives')!;
     this.selectionEl = root.querySelector('.selection')!;
@@ -163,25 +164,31 @@ export class Hud {
           ${RES_ORDER.map(
             (k) => `<div class="res" data-res="${k}">${icon(k)}<span class="val">0</span></div>`,
           ).join('')}
+          <div class="res-sep"></div>
           <div class="res" data-res="pop">${icon('pop')}<span class="val">0/0</span></div>
         </div>
-        <div style="display:flex;gap:8px;align-items:flex-start;">
+        <div class="age-cluster">
           <div class="age-badge">
-            ${icon('age')}
+            <span class="age-medal"><b class="age-numeral">I</b></span>
             <div class="age-text">
               <div class="age-name">Tool Age</div>
               <div class="clock">00:00</div>
             </div>
           </div>
-          <button class="icon-btn" data-act="menu" aria-label="Menu">${icon('menu')}</button>
+          <button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">${icon('menu')}</button>
         </div>
       </div>
 
-      <div class="objectives"><h4>Objectives</h4><div class="obj-list"></div></div>
+      <div class="objectives">
+        <h4>Objectives</h4>
+        <div class="obj-rule"><i></i><b>◆</b><i></i></div>
+        <div class="obj-list"></div>
+      </div>
 
       <div class="minimap-wrap clickable">
-        <div class="compass">N</div>
+        <button class="mm-expand" data-act="home" aria-label="Centre on town centre">${icon('home')}</button>
         <canvas class="minimap"></canvas>
+        <div class="compass">N</div>
       </div>
 
       <div class="selection empty"></div>
@@ -189,9 +196,9 @@ export class Hud {
       <div class="groups"></div>
 
       <div class="right-rail">
-        <button class="icon-btn" data-act="army" aria-label="Select army">${icon('army')}</button>
-        <button class="icon-btn" data-act="idle" aria-label="Select idle villager">${icon('idle')}<span class="badge" style="display:none">0</span></button>
         <button class="icon-btn" data-act="home" aria-label="Centre on town centre">${icon('home')}</button>
+        <button class="icon-btn" data-act="idle" aria-label="Select idle villager">${icon('idle')}<span class="badge" style="display:none">0</span></button>
+        <button class="icon-btn" data-act="army" aria-label="Select army">${icon('army')}</button>
         <button class="icon-btn" data-act="mute" aria-label="Toggle sound">${icon('sound')}</button>
         <button class="icon-btn desktop-only" data-act="help" aria-label="Controls" title="Controls (F1)">?</button>
       </div>
@@ -224,7 +231,7 @@ export class Hud {
         ['Middle drag', 'Pan the camera'],
       ],
       [
-        ['Screen edge · arrows', 'Scroll the map'],
+        ['Screen edge · WASD', 'Scroll the map (arrows too)'],
         ['Wheel · + −', 'Zoom'],
         ['Space', 'Centre on your town centre'],
         ['H', 'Select your town centre'],
@@ -232,8 +239,8 @@ export class Hud {
         ['. / ,', 'Next / previous idle villager'],
       ],
       [
-        ['Q W E R T', 'Top row of the open panel'],
-        ['A S D F G', 'Second row of the open panel'],
+        ['Q E R T Y', 'Buttons of the open panel'],
+        ['Z X C V', "The build menu's category tabs"],
         ['Ctrl + 1…0', 'Assign a control group'],
         ['1…0', 'Select it · press twice to jump there'],
         ['Delete', 'Delete the selected units'],
@@ -259,11 +266,12 @@ export class Hud {
 
   private wire(): void {
     const on = (sel: string, fn: () => void) => {
-      const el = this.root.querySelector<HTMLElement>(sel);
-      el?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        fn();
-      });
+      for (const el of this.root.querySelectorAll<HTMLElement>(sel)) {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          fn();
+        });
+      }
     };
     on('[data-act="menu"]', () => this.cb.onMenu());
     on('[data-act="army"]', () => this.cb.onSelectArmy());
@@ -291,6 +299,7 @@ export class Hud {
       return { px, py };
     };
     mm.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('.mm-expand')) return;
       e.stopPropagation();
       e.preventDefault();
       const p = at(e);
@@ -338,6 +347,8 @@ export class Hud {
     }
 
     this.ageName.textContent = p.age >= 2 ? 'Bronze Age' : 'Tool Age';
+    const numeral = p.age >= 2 ? 'II' : 'I';
+    if (this.ageNumeral.textContent !== numeral) this.ageNumeral.textContent = numeral;
     this.clock.textContent = formatClock(game.time);
 
     this.buildFab.classList.toggle('on', buildOpen || !!placing);
@@ -772,7 +783,7 @@ export class Hud {
     const html = items
       .map(
         (o) =>
-          `<div class="obj-item ${o.done ? 'done' : ''}"><span>${o.text}</span>${
+          `<div class="obj-item ${o.done ? 'done' : ''}"><i class="bullet"></i><span>${o.text}</span>${
             o.detail ? `<span class="dot">${o.detail}</span>` : ''
           }</div>`,
       )
