@@ -4,6 +4,7 @@ import { clamp } from './core/math';
 import { Controls, type HotkeyMods, type PointerIntent } from './input/controls';
 import { Minimap } from './render/minimap';
 import { SceneRenderer } from './render/scene';
+import { preloadPalm } from './render/characters';
 import { SkirmishAI } from './sim/ai';
 import { BUILDINGS, FACTIONS, LEVEL_TECHS, TECHS, TICK_DT, UNITS, buildingCost, canAfford, levelName, levelNumeral } from './sim/data';
 import { Game } from './sim/game';
@@ -80,6 +81,10 @@ class GameController {
   constructor() {
     const quality = detectQuality();
     this.scene = new SceneRenderer(canvas, quality);
+    // Start fetching the GLB characters and the palm while the player is
+    // still on the title screen — under 2MB, usually done before first click.
+    void this.scene.characters.preload();
+    void preloadPalm();
 
     this.hud = new Hud(uiRoot, {
       onBuildToggle: () => this.toggleBuildMenu(),
