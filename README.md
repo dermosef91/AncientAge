@@ -39,7 +39,7 @@ whichever you reach for.
 
 | | Touch | Mouse / keyboard |
 |---|---|---|
-| Look around | drag | screen edge, arrow keys, or middle-drag |
+| Look around | drag | screen edge, `WASD` / arrow keys, or middle-drag |
 | Zoom | pinch | scroll wheel, or `+` / `-` |
 | Select | tap a unit or building | left-click, or left-drag a box |
 | Add to selection | — | `Shift` + left-click |
@@ -47,14 +47,15 @@ whichever you reach for.
 | Move / attack / gather | tap the ground, an enemy or a resource | **right-click** the same |
 | Build | **Build** → pick a building → drag the ghost → release | `B`, pick, left-click to place, right-click to cancel |
 | Menu | ☰ | `Esc` |
-| Centre on base | 🏠 button | `Space` |
+| Centre on base | 🏠 button | `Space` or `H` |
 
 ### Keyboard
 
 | Key | |
 |---|---|
-| `Q` `W` `E` `R` `T` | top row of whichever panel is open |
-| `A` `S` `D` `F` `G` | second row of that panel — the build menu's category tabs |
+| `W` `A` `S` `D` | scroll the map (arrow keys do the same) |
+| `Q` `E` `R` `T` `Y` | the buttons of whichever panel is open |
+| `Z` `X` `C` `V` | the build menu's category tabs |
 | `Shift` + `1`…`0` | assign a control group (`Ctrl` also works where the browser allows it) |
 | `1`…`0` | select that group; press twice to jump to it |
 | `H` | select your town centre |
@@ -64,9 +65,9 @@ whichever you reach for.
 | `F1` or `?` | the full controls reference |
 
 The grid hotkeys follow the panel: with the town centre selected `Q` trains a villager,
-and with the build menu open `Q` picks the first building on the open tab while `S`
-switches to Military. Every button carries its letter, so the key under a button is
-always the one that presses it.
+and with the build menu open `Q` picks the first building on the open tab while `X`
+switches to Military. The rows step around `WASD`, which belongs to the camera. Every
+button carries its letter, so the key under a button is always the one that presses it.
 
 The right-hand rail selects your whole army, cycles idle villagers, recentres on the
 town centre and mutes sound. Left-click or drag the minimap to move the camera;

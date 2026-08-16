@@ -55,7 +55,16 @@ const EDGE_SPEED = 1150;
 const KEY_PAN_SPEED = 1000;
 
 /** Keys the camera owns; everything else is offered to the game as a hotkey. */
-const PAN_KEYS = new Set(['arrowleft', 'arrowright', 'arrowup', 'arrowdown']);
+const PAN_KEYS = new Set([
+  'arrowleft',
+  'arrowright',
+  'arrowup',
+  'arrowdown',
+  'w',
+  'a',
+  's',
+  'd',
+]);
 
 /**
  * Unified pointer handling for touch and mouse.
@@ -369,12 +378,14 @@ export class Controls {
 
   /** Camera scrolling from held keys and the screen edge, called each frame. */
   update(dt: number): void {
+    // panBy takes a screen delta, as though the world were being dragged, so
+    // scrolling "up" means pushing the world down the screen — hence the signs.
     let dx = 0;
     let dy = 0;
-    if (this.keys.has('arrowleft')) dx += 1;
-    if (this.keys.has('arrowright')) dx -= 1;
-    if (this.keys.has('arrowup')) dy += 1;
-    if (this.keys.has('arrowdown')) dy -= 1;
+    if (this.keys.has('arrowleft') || this.keys.has('a')) dx += 1;
+    if (this.keys.has('arrowright') || this.keys.has('d')) dx -= 1;
+    if (this.keys.has('arrowup') || this.keys.has('w')) dy -= 1;
+    if (this.keys.has('arrowdown') || this.keys.has('s')) dy += 1;
     if (dx || dy) {
       const len = Math.hypot(dx, dy) || 1;
       this.scene.panBy((dx / len) * KEY_PAN_SPEED * dt, (dy / len) * KEY_PAN_SPEED * dt);
@@ -387,8 +398,8 @@ export class Controls {
       let ey = 0;
       if (this.mouseX <= EDGE_MARGIN) ex = 1;
       else if (this.mouseX >= w - EDGE_MARGIN) ex = -1;
-      if (this.mouseY <= EDGE_MARGIN) ey = 1;
-      else if (this.mouseY >= h - EDGE_MARGIN) ey = -1;
+      if (this.mouseY <= EDGE_MARGIN) ey = -1;
+      else if (this.mouseY >= h - EDGE_MARGIN) ey = 1;
       if (ex || ey) {
         const len = Math.hypot(ex, ey) || 1;
         this.scene.panBy((ex / len) * EDGE_SPEED * dt, (ey / len) * EDGE_SPEED * dt);
