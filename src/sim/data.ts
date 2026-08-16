@@ -83,6 +83,8 @@ export const NODE_AMOUNT: Record<NodeTypeId, number> = {
   stone: 520,
   fish: 320,
   farm: FARM_FOOD,
+  // Placeholder for type completeness — real carcass amounts come from the
+  // hunted animal's UnitDef.carcassFood, not from mapgen.
   carcass: 140,
 };
 
@@ -420,7 +422,7 @@ export const BUILDINGS: Record<BuildingTypeId, BuildingDef> = {
     buildTime: 60,
     popCap: 8,
     trains: ['villager'],
-    researches: ['wheel', 'irrigation'],
+    researches: ['toHamlet', 'toVillage', 'toTown', 'toCity', 'toMetropolis', 'wheel', 'irrigation'],
     dropOff: 'all',
     age: 4,
     main: true,

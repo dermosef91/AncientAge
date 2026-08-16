@@ -376,14 +376,21 @@ export function generateMap(
 
   const playerSite = candidates[rng.int(0, Math.min(29, candidates.length - 1))];
   let enemySite: Candidate | null = null;
-  for (const minFrac of [0.55, 0.45, 0.35, 0.22, 0]) {
-    const far = candidates.filter(
-      (c) => Math.hypot(c.gx - playerSite.gx, c.gz - playerSite.gz) >= N * minFrac,
-    );
+  const distToPlayer = (c: Candidate): number =>
+    Math.hypot(c.gx - playerSite.gx, c.gz - playerSite.gz);
+  for (const minFrac of [0.55, 0.45, 0.35, 0.22]) {
+    const far = candidates.filter((c) => distToPlayer(c) >= N * minFrac);
     if (far.length > 0) {
       enemySite = far[rng.int(0, Math.min(14, far.length - 1))];
       break;
     }
+  }
+  if (!enemySite) {
+    // Degenerate seed: take the farthest candidate outright, and never one
+    // whose camp footprint could overlap the player's.
+    const usable = candidates.filter((c) => distToPlayer(c) >= 10);
+    const pool = usable.length > 0 ? usable : candidates;
+    enemySite = pool.reduce((a, b) => (distToPlayer(a) >= distToPlayer(b) ? a : b));
   }
   const startTiles = [
     { gx: playerSite.gx, gz: playerSite.gz },

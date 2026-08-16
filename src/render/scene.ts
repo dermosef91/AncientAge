@@ -116,6 +116,7 @@ export class SceneRenderer {
   private scaffoldPool!: InstancePool;
   private teamDiscs!: InstancePool;
   private chestPool: InstancePool | null = null;
+  private chestShown: boolean[] = [];
 
   private unitVisuals = new Map<number, UnitVisual>();
   private buildingVisuals = new Map<number, BuildingVisual>();
@@ -859,15 +860,20 @@ export class SceneRenderer {
       this.scene.add(this.chestPool.mesh);
       this.chestPool.setCount(game.treasures.length);
       game.treasures.forEach((_, i) => this.chestPool!.hide(i));
+      this.chestShown = game.treasures.map(() => false);
       this.chestPool.flush(true);
     }
-    // A chest surfaces once its ground is explored and sinks when claimed.
+    // A chest surfaces once its ground is explored and sinks when claimed —
+    // only state *transitions* touch the instance buffer.
     let dirty = false;
     game.treasures.forEach((t, i) => {
-      if (t.taken || !t.spotted && !game.isExploredAt(t.x, t.z)) {
-        this.chestPool!.hide(i);
-      } else {
+      const show = !t.taken && (t.spotted || game.isExploredAt(t.x, t.z));
+      if (show === this.chestShown[i]) return;
+      this.chestShown[i] = show;
+      if (show) {
         this.chestPool!.place(i, t.x, game.grid.heightAt(t.x, t.z), t.z, (t.id % 16) * 0.4, 1);
+      } else {
+        this.chestPool!.hide(i);
       }
       dirty = true;
     });
@@ -1163,6 +1169,7 @@ export class SceneRenderer {
       (this.chestPool.mesh.material as Material).dispose();
       this.chestPool.mesh.dispose();
       this.chestPool = null;
+      this.chestShown = [];
     }
     if (this.teamDiscs) {
       this.scene.remove(this.teamDiscs.mesh);

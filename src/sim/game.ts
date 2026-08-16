@@ -322,7 +322,9 @@ export class Game {
         this.visibleMask[i] = 1;
         if (!this.explored[i]) {
           this.explored[i] = 1;
-          this.exploredCount++;
+          // The progress meter divides by land tiles, so count land only.
+          const t = this.grid.terrain[i];
+          if (t !== 0 && t !== 1) this.exploredCount++;
         }
       }
     }
@@ -441,6 +443,7 @@ export class Game {
         this.forEachNearby(u.x, u.z, 4, (o) => {
           if (found || o.state === 'dead') return;
           if (this.players[o.owner]?.kind === 'gaia') return;
+          if (dist2(o.x, o.z, u.x, u.z) > 4 * 4) return;
           found = o;
         });
         if (found) {
@@ -1084,13 +1087,17 @@ export class Game {
     for (const b of this.buildings) this.updateBuilding(b, dt);
     this.updateProjectiles(dt);
     this.separateUnits();
-    this.cleanup();
 
+    // The wilds and visibility read the spatial hash, whose indices point
+    // into the tick-start units array — so they must run before cleanup()
+    // replaces that array.
     if (this.tickCount % 5 === 0) this.updateVisibility();
     if (this.tickCount % 10 === 0) {
       for (const p of this.players) this.recomputePop(p.index);
       this.tickWilds();
     }
+
+    this.cleanup();
     this.checkVictory();
   }
 
@@ -1779,7 +1786,9 @@ export class Game {
     });
 
     const attackerOwner = source ? source.owner : ownerOverride;
-    if (target.owner === 0 && attackerOwner > 0) this.notifyUnderAttack(target.x, target.z);
+    // Only the rival raises the settlement alarm — a boar bite on a hunt
+    // should not eat the 12-second alarm cooldown a real raid needs.
+    if (target.owner === 0 && attackerOwner === 1) this.notifyUnderAttack(target.x, target.z);
 
     // Villagers and idle troops fight back. A grazing creature does too —
     // except the deer, which bolts.
@@ -2139,6 +2148,7 @@ export class Game {
     let bestD = Infinity;
     for (const u of this.units) {
       if (u.state === 'dead') continue;
+      if (u.owner !== 0 && !this.isEntityVisible(u)) continue;
       const d = dist(u.x, u.z, x, z) - u.def.radius;
       if (d < bestD && d < maxDist) {
         bestD = d;
@@ -2148,6 +2158,7 @@ export class Game {
     if (best && bestD < 0.9) return best;
     for (const b of this.buildings) {
       if (b.dead) continue;
+      if (b.owner !== 0 && !this.isEntityVisible(b)) continue;
       const half = (b.size * TILE) / 2;
       const dx = Math.abs(b.x - x) - half;
       const dz = Math.abs(b.z - z) - half;
@@ -2187,6 +2198,7 @@ export class Game {
     let bestD = Infinity;
     for (const n of this.nodes) {
       if (n.depleted || n.type === 'farm') continue;
+      if (!this.isExploredAt(n.x, n.z)) continue;
       const d = dist(n.x, n.z, x, z) - n.radius;
       if (d < bestD && d < maxDist) {
         bestD = d;
