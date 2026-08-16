@@ -31,9 +31,10 @@ const TERRAIN_COLOR: Record<number, number> = {
 };
 
 /**
- * Ground colours per homeland. Egypt bleaches towards desert, Greece keeps the
- * warm Mediterranean base, Rome greens up. Only the land entries change — the
- * sea is the same sea whoever is fighting over it.
+ * Ground colours per region biome. Egypt bleaches towards desert, Greece keeps
+ * the warm Mediterranean base, Rome greens up. The map carries all three side
+ * by side now, so the palette is resolved per tile rather than per match —
+ * corner-vertex averaging blends the seams automatically.
  */
 const BIOME_GROUND: Record<Biome, Partial<Record<number, number>>> = {
   egypt: {
@@ -50,6 +51,11 @@ const BIOME_GROUND: Record<Biome, Partial<Record<number, number>>> = {
     [T_ROCK]: 0x9c9689,
   },
 };
+
+/** Terrain-type -> colour tables, one per biome index (see BIOME_INDEX). */
+const BIOME_TABLES: Record<number, number>[] = (['egypt', 'greece', 'rome'] as Biome[]).map(
+  (b) => ({ ...TERRAIN_COLOR, ...BIOME_GROUND[b] }) as Record<number, number>,
+);
 
 /** Cheap hash noise for per-vertex colour variation. */
 function hash2(x: number, y: number): number {
@@ -85,11 +91,12 @@ function distToSeg(px: number, pz: number, ax: number, az: number, bx: number, b
   return Math.hypot(px - cx, pz - cz);
 }
 
-export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'greece'): TerrainBuild {
-  const groundColor = { ...TERRAIN_COLOR, ...BIOME_GROUND[biome] };
-  // The mottling and dry-patch tints follow the ground they sit on.
-  const mottleLight = biome === 'rome' ? C.grassDry : C.sandLight;
-  const mottleDark = biome === 'rome' ? C.grassDark : C.sandDark;
+export function buildTerrain(grid: Grid, paths: Polyline[], biomes?: Uint8Array): TerrainBuild {
+  // The mottling tints follow the ground they sit on, per region.
+  const MOTTLE_LIGHT = [C.sandLight, C.sandLight, C.grassDry];
+  const MOTTLE_DARK = [C.sandDark, C.sandDark, C.grassDark];
+  const biomeAt = (gx: number, gz: number): number =>
+    biomes ? biomes[clamp(gz, 0, GRID_SIZE - 1) * GRID_SIZE + clamp(gx, 0, GRID_SIZE - 1)] : 1;
   const n = GRID_SIZE + 1;
   const positions = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
@@ -120,7 +127,7 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
   };
 
   const cornerColor = (cx: number, cz: number, h: number): number => {
-    // Blend the colours of the surrounding tiles.
+    // Blend the colours of the surrounding tiles, each in its own biome's hue.
     let r = 0;
     let g = 0;
     let b = 0;
@@ -131,7 +138,7 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
         const gx = clamp(cx + dx, 0, GRID_SIZE - 1);
         const gz = clamp(cz + dz, 0, GRID_SIZE - 1);
         const t = grid.terrain[grid.idx(gx, gz)];
-        const c = groundColor[t] ?? C.sand;
+        const c = BIOME_TABLES[biomeAt(gx, gz)][t] ?? C.sand;
         r += (c >> 16) & 255;
         g += (c >> 8) & 255;
         b += c & 255;
@@ -139,15 +146,16 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
         count++;
       }
     }
-    let hex = ((r / count) << 16) | ((g / count) << 8) | (b / count | 0);
-    hex = (Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count);
+    let hex = (Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count);
 
     const wx = cx * TILE - WORLD_HALF;
     const wz = cz * TILE - WORLD_HALF;
 
-    // Mottling.
+    // Mottling, tinted for whichever region this corner sits in. Strong
+    // enough that neighbouring facets visibly differ, as in the reference.
+    const bio = biomeAt(cx, cz);
     const noise = smoothHash(cx * 0.22, cz * 0.22) * 0.5 + smoothHash(cx * 0.9, cz * 0.9) * 0.5;
-    hex = mixHex(hex, noise > 0.5 ? mottleLight : mottleDark, (noise - 0.5) * 0.34 + 0.09);
+    hex = mixHex(hex, noise > 0.5 ? MOTTLE_LIGHT[bio] : MOTTLE_DARK[bio], (noise - 0.5) * 0.44 + 0.12);
 
     // Dry grass patches on the greens.
     if (h > 0.1 && rockish === 0) {
@@ -156,9 +164,13 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
       if (patch < 0.3) hex = mixHex(hex, C.grassDark, (0.3 - patch) * 0.9);
     }
 
-    // Beach lightening right at the waterline.
-    if (h > -0.35 && h < 0.55) {
-      hex = mixHex(hex, C.sandLight, smoothstep(0.55, -0.1, h) * 0.55);
+    // Wet sand right at the waterline: darker and warmer, not washed out —
+    // the bright dry beach sits just above it.
+    if (h > -0.35 && h < 0.6) {
+      const wet = smoothstep(0.34, 0.05, h);
+      hex = mixHex(hex, 0xd2b070, wet * 0.7);
+      const dryline = smoothstep(0.6, 0.34, h) * (1 - wet);
+      hex = mixHex(hex, C.sandLight, dryline * 0.35);
     }
 
     // Trodden sandy paths.
@@ -179,10 +191,20 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
   for (let cz = 0; cz < n; cz++) {
     for (let cx = 0; cx < n; cx++) {
       const i = cz * n + cx;
-      const h = cornerHeight(cx, cz);
-      positions[i * 3] = cx * TILE - WORLD_HALF;
+      let h = cornerHeight(cx, cz);
+      // A little vertex jitter breaks flat plains into visible facets — the
+      // low-poly look lives or dies on this once the material is flat-shaded.
+      // Land only, and small enough that units never visibly float.
+      if (h > 0.1) {
+        // Never jitter land below the waterline + wave crest.
+        h = Math.max(0.26, h + (smoothHash(cx * 3.1 + 13, cz * 3.1 + 7) - 0.5) * 0.22);
+        positions[i * 3] = cx * TILE - WORLD_HALF + (smoothHash(cx * 2.3, cz * 2.3) - 0.5) * 0.7;
+        positions[i * 3 + 2] = cz * TILE - WORLD_HALF + (smoothHash(cx * 2.7 + 41, cz * 2.7) - 0.5) * 0.7;
+      } else {
+        positions[i * 3] = cx * TILE - WORLD_HALF;
+        positions[i * 3 + 2] = cz * TILE - WORLD_HALF;
+      }
       positions[i * 3 + 1] = h;
-      positions[i * 3 + 2] = cz * TILE - WORLD_HALF;
       col.set(cornerColor(cx, cz, h));
       colors[i * 3] = col.r;
       colors[i * 3 + 1] = col.g;
@@ -207,7 +229,9 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
 
-  const groundMat = new MeshLambertMaterial({ vertexColors: true });
+  // Flat shading gives every triangle its own light — the faceted low-poly
+  // ground of the reference art rather than a smooth blanket.
+  const groundMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const ground = new Mesh(geo, groundMat);
   ground.receiveShadow = true;
   ground.name = 'terrain';
@@ -215,29 +239,38 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
   ground.updateMatrix();
 
   // --- Water ---------------------------------------------------------------
-  const waterSeg = 72;
+  // One vertex per tile: the surf line needs this resolution to stay a line.
+  const waterSeg = GRID_SIZE;
   const waterGeo = new PlaneGeometry(GRID_SIZE * TILE + 24, GRID_SIZE * TILE + 24, waterSeg, waterSeg);
   waterGeo.rotateX(-Math.PI / 2);
   // Tint the surface by the depth beneath it.
   const wpos = waterGeo.attributes.position as BufferAttribute;
   const wcol = new Float32Array(wpos.count * 3);
+  const wbed = new Float32Array(wpos.count);
   for (let i = 0; i < wpos.count; i++) {
     const x = wpos.getX(i);
     const z = wpos.getZ(i);
     const h = grid.heightAt(x, z);
+    wbed[i] = h;
     const depth = clamp(-h / 2.0, 0, 1);
-    col.set(mixHex(C.waterShallow, C.waterDeep, smoothstep(0.05, 0.85, depth)));
+    // Steep curve so even a shallow inland lake picks up some deep tone. The
+    // foam itself is painted per-fragment in the shader, where it can stay a
+    // crisp line instead of triangle-sized blobs.
+    const hex = mixHex(C.waterShallow, C.waterDeep, smoothstep(0.0, 0.55, depth));
+    col.set(hex);
     wcol[i * 3] = col.r;
     wcol[i * 3 + 1] = col.g;
     wcol[i * 3 + 2] = col.b;
   }
   waterGeo.setAttribute('color', new BufferAttribute(wcol, 3));
+  waterGeo.setAttribute('bedh', new BufferAttribute(wbed, 1));
 
   const waterMat = new MeshLambertMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.86,
+    opacity: 0.92,
     depthWrite: false,
+    flatShading: true,
   });
   const timeUniform = { value: 0 };
   waterMat.onBeforeCompile = (shader) => {
@@ -247,6 +280,9 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
         '#include <common>',
         `#include <common>
          uniform float uTime;
+         attribute float bedh;
+         varying float vBedH;
+         varying vec2 vXZ;
          float waveH(vec2 p){
            return sin(p.x * 0.33 + uTime * 1.15) * 0.075
                 + sin(p.y * 0.27 - uTime * 0.95) * 0.075
@@ -266,7 +302,40 @@ export function buildTerrain(grid: Grid, paths: Polyline[], biome: Biome = 'gree
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-         transformed.y += hC;`,
+         transformed.y += hC;
+         vBedH = bedh;
+         vXZ = position.xz;`,
+      );
+    // Surf, painted per fragment: a crisp broken white line where the seabed
+    // rises to the land, gently breathing with the waves.
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uTime;
+         varying float vBedH;
+         varying vec2 vXZ;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+         {
+           float breathe = sin(uTime * 0.9 + vXZ.x * 0.07 + vXZ.y * 0.05) * 0.03;
+           float line = smoothstep(-0.24 + breathe, -0.09 + breathe, vBedH)
+                      * (1.0 - smoothstep(0.0, 0.09, vBedH));
+           // Two interfering sines chop the ribbon into separate breakers.
+           float streak = sin(vXZ.x * 0.62 + sin(vXZ.y * 0.5 + uTime * 0.55) * 2.4)
+                        * sin(vXZ.y * 0.44 - uTime * 0.3 + vXZ.x * 0.21);
+           float wisp = 0.35 + 0.65 * smoothstep(-0.3, 0.65, streak);
+           float swash = smoothstep(-0.75, -0.26, vBedH) * (1.0 - line);
+           float foam = clamp(pow(line, 2.1) * wisp * 1.35, 0.0, 1.0);
+           // A soft moving ripple keeps broad shallows from reading flat.
+           float ripple = sin(vXZ.x * 0.16 + uTime * 0.35) * sin(vXZ.y * 0.13 - uTime * 0.28)
+                        + 0.5 * sin((vXZ.x + vXZ.y) * 0.31 + uTime * 0.5);
+           diffuseColor.rgb *= 0.975 + 0.025 * ripple;
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.96, 0.94), swash * 0.1);
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), foam * 0.93);
+         }`,
       );
   };
 

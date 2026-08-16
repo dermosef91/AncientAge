@@ -324,6 +324,68 @@ function townCenter(b: GeoBuilder, s: Style, f: FactionId, w: number, flags: Fla
 /** ---------------------------------------------------------------------------
  * House
  * ------------------------------------------------------------------------- */
+/** A single hide tent — the only shelter a fresh camp can raise. */
+function tent(b: GeoBuilder, s: Style, f: FactionId, w: number): number {
+  const cloth = mixHex(FACTIONS[f].colors.cloth, C.thatch, 0.45);
+  // Trampled ground.
+  b.boxOn(0, 0, 0, w - 0.5, 0.1, w - 0.5, s.base);
+  // The tent: a squat cone with a smoke-hole pole through the top.
+  b.cone(0, 0.1, 0, w * 0.42, 1.9, cloth, 8);
+  b.cone(0, 0.1, 0, w * 0.44, 0.5, shade(cloth, 0.82), 8);
+  b.cylinder(0, 1.35, 0, 0.05, 0.05, 1.5, C.wood, 5);
+  // Door flap.
+  b.boxOn(0, 0.12, -w * 0.36, 0.5, 0.85, 0.12, shade(cloth, 0.7));
+  // A bedroll and a firewood pile out front.
+  b.boxOn(w * 0.32, 0.1, w * 0.2, 0.6, 0.14, 0.32, C.thatch, 0.4);
+  b.boxOn(-w * 0.3, 0.1, w * 0.24, 0.42, 0.2, 0.3, C.wood, 0.2);
+  return 2.1;
+}
+
+/**
+ * The founding camp: a chief's tent, a fire, stores and a standard. It reads
+ * as the humble ancestor of the town centre it will one day become.
+ */
+function camp(b: GeoBuilder, s: Style, f: FactionId, w: number, flags: FlagAnchor[]): number {
+  const col = FACTIONS[f].colors;
+  const cloth = mixHex(col.cloth, C.thatch, 0.3);
+  const half = w / 2;
+  b.boxOn(0, 0, 0, w - 0.4, 0.14, w - 0.4, s.base);
+
+  // Chief's tent, larger and banner-topped.
+  b.cone(-0.6, 0.14, 0.5, 1.9, 2.8, cloth, 8);
+  b.cone(-0.6, 0.14, 0.5, 2.0, 0.6, shade(cloth, 0.8), 8);
+  b.cylinder(-0.6, 2.1, 0.5, 0.06, 0.06, 1.6, C.wood, 5);
+  b.boxOn(-0.6, 0.16, -1.25, 0.6, 1.0, 0.14, shade(cloth, 0.68));
+  flags.push({ x: -0.6, y: 3.35, z: 0.5, scale: 0.85, color: col.accent });
+
+  // A second, lesser tent.
+  b.cone(1.55, 0.14, 1.35, 1.05, 1.7, shade(cloth, 0.9), 7);
+
+  // Fire pit: stone ring, embers, spit.
+  const fx = 1.15;
+  const fz = -0.9;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    b.boxOn(fx + Math.cos(a) * 0.55, 0.12, fz + Math.sin(a) * 0.55, 0.3, 0.22, 0.26, C.rock, a);
+  }
+  b.boxOn(fx, 0.12, fz, 0.5, 0.18, 0.5, 0xe08030, 0.6);
+  b.cylinder(fx - 0.6, 0.12, fz, 0.04, 0.04, 0.9, C.wood, 4);
+  b.cylinder(fx + 0.6, 0.12, fz, 0.04, 0.04, 0.9, C.wood, 4);
+  b.boxOn(fx, 0.95, fz, 1.3, 0.07, 0.07, C.wood);
+
+  // Stores: crates and grain sacks by the drop-off side.
+  b.boxOn(-1.7, 0.14, -1.3, 0.62, 0.5, 0.62, C.woodLight, 0.2);
+  b.boxOn(-1.15, 0.14, -1.55, 0.5, 0.38, 0.5, C.wood, 0.5);
+  b.boxOn(-1.5, 0.64, -1.35, 0.4, 0.3, 0.4, C.thatch, 0.3);
+
+  // Tribal standard at the camp edge.
+  b.cylinder(half - 0.75, 0.14, half - 0.85, 0.06, 0.08, 2.2, C.wood, 5);
+  b.boxOn(half - 0.75, 2.3, half - 0.85, 0.5, 0.34, 0.1, col.accent);
+  b.cone(half - 0.75, 2.6, half - 0.85, 0.14, 0.3, s.trim, 6);
+
+  return 3.3;
+}
+
 function house(b: GeoBuilder, s: Style, f: FactionId, w: number, flags: FlagAnchor[]): number {
   const half = w / 2;
   b.boxOn(0, 0, 0, w - 0.4, 0.16, w - 0.4, s.base);
@@ -837,6 +899,12 @@ export function buildingModel(type: BuildingTypeId, faction: FactionId, sizeTile
   let height: number;
 
   switch (type) {
+    case 'camp':
+      height = camp(b, s, faction, w, flags);
+      break;
+    case 'tent':
+      height = tent(b, s, faction, w);
+      break;
     case 'towncenter':
       height = townCenter(b, s, faction, w, flags);
       break;

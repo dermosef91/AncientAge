@@ -4,9 +4,11 @@ import {
   BUILDINGS,
   ELITE_BUILDING,
   FACTIONS,
+  LEVEL_TECHS,
   TECHS,
   buildingCost,
   canAfford,
+  levelPopCap,
 } from './data';
 import type { Game } from './game';
 import type { Building, BuildingTypeId, ResourceKind, TechId, Unit, UnitTypeId } from './types';
@@ -61,10 +63,10 @@ export class SkirmishAI {
     private difficulty = 1,
   ) {
     this.rng = new Rng(game.seed ^ (0x51ed270b + pi));
-    const tc = game.buildingsOfPlayer(pi).find((b) => b.type === 'towncenter');
+    const tc = game.buildingsOfPlayer(pi).find((b) => b.def.main);
     this.homeX = tc?.x ?? 0;
     this.homeZ = tc?.z ?? 0;
-    const enemyTc = game.buildingsOfPlayer(1 - pi).find((b) => b.type === 'towncenter');
+    const enemyTc = game.buildingsOfPlayer(1 - pi).find((b) => b.def.main);
     this.enemyBaseX = enemyTc?.x ?? 0;
     this.enemyBaseZ = enemyTc?.z ?? 0;
     // Rally between home and the enemy, a short way out from the base.
@@ -99,16 +101,23 @@ export class SkirmishAI {
     return this.game.player(this.pi);
   }
 
+  /** The settlement upgrade the AI should be working towards, if any. */
+  private nextLevelTech(): TechId | null {
+    const p = this.p;
+    if (p.age >= LEVEL_TECHS.length + 1) return null;
+    return LEVEL_TECHS[p.age - 1];
+  }
+
   /**
-   * Resources held back for the Bronze Age. Without this the AI spends every
-   * scrap on villagers and spearmen and never techs up.
+   * Resources held back for the next settlement upgrade. Without this the AI
+   * spends every scrap on villagers and spearmen and never levels up.
    */
   private ageReserve(): { food: number; gold: number } {
-    const p = this.p;
-    if (p.age >= 2 || this.game.time < 160) return { food: 0, gold: 0 };
+    const next = this.nextLevelTech();
+    if (!next || this.game.time < 120) return { food: 0, gold: 0 };
     const tc = this.townCenter();
     if (!tc || tc.research) return { food: 0, gold: 0 };
-    return { food: TECHS.bronzeAge.cost.food ?? 0, gold: TECHS.bronzeAge.cost.gold ?? 0 };
+    return { food: TECHS[next].cost.food ?? 0, gold: TECHS[next].cost.gold ?? 0 };
   }
 
   private villagers(): Unit[] {
@@ -130,7 +139,7 @@ export class SkirmishAI {
 
   private townCenter(): Building | null {
     return (
-      this.game.buildings.find((b) => b.owner === this.pi && b.type === 'towncenter' && !b.dead) ?? null
+      this.game.buildings.find((b) => b.owner === this.pi && b.def.main && !b.dead) ?? null
     );
   }
 
@@ -143,7 +152,7 @@ export class SkirmishAI {
     if (!tc || !tc.complete) return;
     const vills = this.villagers().length;
     // Cap worker count so resources flow into buildings and army instead.
-    const targetVills = this.phase === 'boom' ? 15 : p.age >= 2 ? 22 : 19;
+    const targetVills = Math.min(15 + (p.age - 1) * 3, this.phase === 'boom' ? 17 : 27);
     const headroom = p.popCap - p.pop;
 
     const reserve = this.ageReserve();
@@ -163,12 +172,12 @@ export class SkirmishAI {
   private workerPlan(): WorkerPlan {
     const p = this.p;
     const kinds: ResourceKind[] = ['food', 'wood', 'gold', 'stone'];
-    const needMonument = p.age >= 2 && !this.game.hasCompleteBuilding(this.pi, 'monument');
+    const needMonument = p.age >= 5 && !this.game.hasCompleteBuilding(this.pi, 'monument');
     const target: Record<ResourceKind, number> = {
       food: 520,
       wood: 380,
-      gold: p.age < 2 ? 280 : 340,
-      stone: p.age < 2 ? 140 : needMonument ? 320 : 220,
+      gold: p.age < 4 ? 280 : 340,
+      stone: p.age < 4 ? 140 : needMonument ? 320 : 220,
     };
     const base: Record<ResourceKind, number> = { food: 0.36, wood: 0.28, gold: 0.2, stone: 0.16 };
     const raw: Record<ResourceKind, number> = { food: 0, wood: 0, gold: 0, stone: 0 };
@@ -260,34 +269,47 @@ export class SkirmishAI {
       if (inProgress.length >= 2) return;
     }
 
-    const has = (t: BuildingTypeId, complete = false) => g.countBuildings(this.pi, t, !complete) > 0;
     const count = (t: BuildingTypeId) => g.countBuildings(this.pi, t);
+    const popCeiling = levelPopCap(p.age);
 
     const wants: BuildingTypeId[] = [];
 
-    // Housing first - never get supply blocked.
-    if (p.popCap - p.pop <= 3 && p.popCap < 60) wants.push('house');
+    // Housing first - never get supply blocked. Tents until houses unlock.
+    const shelter: BuildingTypeId = p.age >= 3 ? 'house' : 'tent';
+    if (p.popCap - p.pop <= 3 && p.popCap < popCeiling) wants.push(shelter);
+
+    // The next settlement upgrade's building prerequisites come next — the
+    // ladder itself is the strategy now.
+    const next = this.nextLevelTech();
+    if (next) {
+      for (const need of TECHS[next].prereqBuildings ?? []) {
+        if (count(need) < 1) wants.push(need);
+      }
+    }
+
     // A storehouse out by the woods early.
-    if (count('storehouse') < 1 && g.time > 35) wants.push('storehouse');
-    if (count('barracks') < 1 && g.time > 75) wants.push('barracks');
-    if (count('storehouse') < 2 && g.time > 130) wants.push('storehouse');
-    if (count('range') < 1 && g.time > 155) wants.push('range');
-    if (count('storehouse') < 3 && g.time > 300) wants.push('storehouse');
+    if (p.age >= 2 && count('storehouse') < 1 && g.time > 50) wants.push('storehouse');
+    if (p.age >= 3 && count('barracks') < 1 && g.time > 90) wants.push('barracks');
+    if (p.age >= 2 && count('storehouse') < 2 && g.time > 170) wants.push('storehouse');
+    if (p.age >= 4 && count('range') < 1 && g.time > 200) wants.push('range');
+    if (p.age >= 2 && count('storehouse') < 3 && g.time > 340) wants.push('storehouse');
     // Farms once food nodes are thin.
     const foodNodes = g.nodes.filter(
       (n) => !n.depleted && n.resource === 'food' && n.type !== 'fish' &&
         dist2(n.x, n.z, this.homeX, this.homeZ) < 60 * 60,
     ).length;
-    if (foodNodes < 10 && count('farm') < 8) wants.push('farm');
-    if (p.age >= 2) {
+    if (p.age >= 2 && foodNodes < 10 && count('farm') < 8) wants.push('farm');
+    if (p.age >= 4) {
+      if (count('tower') < 2 && g.time > 280) wants.push('tower');
+      if (count('barracks') < 2 && g.time > 320) wants.push('barracks');
+      if (count('range') < 2 && g.time > 380) wants.push('range');
+      if (count('tower') < 4 && g.time > 440) wants.push('tower');
+    }
+    if (p.age >= 5) {
       // Never wonder up before there is an army building to defend it.
       if (count('monument') < 1 && count('barracks') > 0) wants.push('monument');
-      if (count('tower') < 2 && g.time > 260) wants.push('tower');
-      if (count('barracks') < 2 && g.time > 300) wants.push('barracks');
-      if (count('range') < 2 && g.time > 360) wants.push('range');
-      if (count('tower') < 4 && g.time > 420) wants.push('tower');
     }
-    if (p.popCap - p.pop <= 6 && p.popCap < 60) wants.push('house');
+    if (p.popCap - p.pop <= 6 && p.popCap < popCeiling) wants.push(shelter);
 
     for (const type of wants) {
       const cost = buildingCost(type, p.faction);
@@ -302,7 +324,6 @@ export class SkirmishAI {
         return;
       }
     }
-    void has;
   }
 
   private assignBuilders(site: Building): void {
@@ -372,13 +393,15 @@ export class SkirmishAI {
     const g = this.game;
     const p = this.p;
     const tc = this.townCenter();
-    const order: { tech: TechId; where: BuildingTypeId }[] = [
-      { tech: 'bronzeAge', where: 'towncenter' },
-      { tech: 'wheel', where: 'towncenter' },
+    const next = this.nextLevelTech();
+    // The settlement upgrade always leads; supporting techs slot in around it.
+    const order: { tech: TechId; where: BuildingTypeId | 'main' }[] = [
+      ...(next ? [{ tech: next, where: 'main' as const }] : []),
+      { tech: 'wheel', where: 'main' },
       { tech: 'bronzeWeapons', where: 'barracks' },
       { tech: 'doctrine', where: 'monument' },
       { tech: 'fletching', where: 'range' },
-      { tech: 'irrigation', where: 'towncenter' },
+      { tech: 'irrigation', where: 'main' },
       { tech: 'masonry', where: 'monument' },
     ];
     for (const step of order) {
@@ -386,14 +409,14 @@ export class SkirmishAI {
       const def = TECHS[step.tech];
       if ((def.age ?? 1) > p.age) continue;
       const building =
-        step.where === 'towncenter'
+        step.where === 'main'
           ? tc
           : g.buildings.find((b) => b.owner === this.pi && b.type === step.where && b.complete && !b.dead);
       if (!building) continue;
       if (building.research) continue;
-      if (step.tech !== 'bronzeAge' && p.age < 2) {
-        // Hold back enough for the age-up before spending on lesser techs.
-        const reserve = TECHS.bronzeAge.cost;
+      if (next && step.tech !== next) {
+        // Hold back enough for the settlement upgrade before lesser techs.
+        const reserve = TECHS[next].cost;
         if (p.res.food - (def.cost.food ?? 0) < (reserve.food ?? 0) * 0.7) continue;
         if (p.res.gold - (def.cost.gold ?? 0) < (reserve.gold ?? 0) * 0.7) continue;
       }
@@ -427,7 +450,7 @@ export class SkirmishAI {
     if (reserve.food > 0 && standing >= 5 && p.res.food < reserve.food + 120) return;
 
     const eliteReady =
-      p.age >= 2 && g.hasCompleteBuilding(this.pi, 'monument');
+      p.age >= 5 && g.hasCompleteBuilding(this.pi, 'monument');
 
     for (const b of producers) {
       if (b.queue.length >= 2) continue;
@@ -544,6 +567,7 @@ export class SkirmishAI {
     let bestD = Infinity;
     for (const u of g.units) {
       if (u.owner === this.pi || u.state === 'dead') continue;
+      if (!g.isHostile(this.pi, u)) continue;
       if (u.def.role === 'naval' || u.def.role === 'navalWorker') continue;
       const d = dist2(u.x, u.z, this.homeX, this.homeZ);
       if (d < 34 * 34 && d < bestD) {

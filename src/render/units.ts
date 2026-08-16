@@ -326,6 +326,111 @@ function warship(b: GeoBuilder, f: FactionId, k: Kit): number {
 }
 
 /** ---------------------------------------------------------------------------
+ * The wilds
+ * ------------------------------------------------------------------------- */
+
+/** Shared four-legged chassis; the caller dresses the head end (+z). */
+function quadruped(
+  b: GeoBuilder,
+  o: { len: number; ht: number; wd: number; legH: number; body: number; belly: number },
+): number {
+  const bodyY = o.legH;
+  // Legs at the corners.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      b.boxOn(sx * (o.wd / 2 - 0.05), 0, sz * (o.len / 2 - 0.09), 0.1, o.legH, 0.1, o.belly);
+    }
+  }
+  b.boxOn(0, bodyY, 0, o.wd, o.ht, o.len, o.body);
+  b.boxOn(0, bodyY - 0.03, 0, o.wd * 0.82, o.ht * 0.4, o.len * 0.9, o.belly);
+  return bodyY + o.ht;
+}
+
+function wolf(b: GeoBuilder): number {
+  const fur = 0x8b8b90;
+  const dark = 0x5e5e64;
+  const top = quadruped(b, { len: 0.78, ht: 0.3, wd: 0.3, legH: 0.26, body: fur, belly: dark });
+  // Head, snout, ears — all shades of the same grey.
+  b.boxOn(0, top - 0.06, 0.42, 0.24, 0.22, 0.26, fur);
+  b.boxOn(0, top - 0.04, 0.58, 0.13, 0.12, 0.16, dark);
+  b.boxOn(-0.08, top + 0.14, 0.4, 0.06, 0.1, 0.05, dark);
+  b.boxOn(0.08, top + 0.14, 0.4, 0.06, 0.1, 0.05, dark);
+  // Raised hackles and a low tail.
+  b.boxOn(0, top, -0.05, 0.16, 0.1, 0.42, dark);
+  b.box(0, top - 0.12, -0.5, 0.1, 0.1, 0.34, dark, 0, -0.5, 0);
+  return top + 0.28;
+}
+
+function boar(b: GeoBuilder): number {
+  const hide = 0x6b4f38;
+  const dark = 0x4c3826;
+  const top = quadruped(b, { len: 0.86, ht: 0.44, wd: 0.42, legH: 0.22, body: hide, belly: dark });
+  // Big wedge head with pale tusks.
+  b.boxOn(0, top - 0.28, 0.5, 0.3, 0.3, 0.28, hide);
+  b.boxOn(0, top - 0.26, 0.66, 0.16, 0.14, 0.12, dark);
+  b.boxOn(-0.1, top - 0.3, 0.62, 0.04, 0.1, 0.05, 0xe9e2d2);
+  b.boxOn(0.1, top - 0.3, 0.62, 0.04, 0.1, 0.05, 0xe9e2d2);
+  // Bristled ridge.
+  b.boxOn(0, top, 0, 0.14, 0.09, 0.6, dark);
+  return top + 0.12;
+}
+
+function deer(b: GeoBuilder): number {
+  const coat = 0xb08c5e;
+  const pale = 0xd9c4a4;
+  const top = quadruped(b, { len: 0.72, ht: 0.28, wd: 0.26, legH: 0.4, body: coat, belly: pale });
+  // Upright neck and head.
+  b.boxOn(0, top - 0.02, 0.28, 0.13, 0.3, 0.14, coat);
+  b.boxOn(0, top + 0.26, 0.34, 0.16, 0.16, 0.2, coat);
+  b.boxOn(0, top + 0.27, 0.46, 0.09, 0.09, 0.1, pale);
+  // Antlers.
+  for (const sx of [-1, 1]) {
+    b.box(sx * 0.08, top + 0.44, 0.3, 0.03, 0.18, 0.03, pale, 0, 0, sx * 0.35);
+    b.box(sx * 0.14, top + 0.52, 0.3, 0.12, 0.03, 0.03, pale);
+  }
+  b.boxOn(0, top - 0.08, -0.38, 0.09, 0.12, 0.08, pale);
+  return top + 0.55;
+}
+
+/** Outlaws wear no faction's colours — leather, soot and a red rag. */
+const BANDIT_KIT: Kit = {
+  cloth: 0x4f463c,
+  clothDark: 0x3a332c,
+  skin: 0xb98a5c,
+  helmet: 0x3a332c,
+  crest: 0x8a2f2f,
+  shield: 0x6b5b45,
+  shieldRim: 0x3a332c,
+  metal: 0x8f8f8f,
+};
+
+function bandit(b: GeoBuilder, k: Kit): number {
+  const h = human(b, { kit: k, faction: 'greece', armour: 'light', tunic: k.cloth });
+  // Hood and a crude blade.
+  b.box(0, h - 0.06, -0.03, 0.24, 0.18, 0.24, k.clothDark);
+  b.box(0.3, 0.62, 0.12, 0.05, 0.42, 0.05, k.metal, 0, 0, 0.5);
+  b.box(-0.28, 0.58, 0, 0.16, 0.22, 0.05, k.shield);
+  return h;
+}
+
+function banditArcher(b: GeoBuilder, k: Kit): number {
+  const h = human(b, { kit: k, faction: 'greece', tunic: k.cloth });
+  b.box(0, h - 0.06, -0.03, 0.24, 0.18, 0.24, k.clothDark);
+  // Bow held at the side.
+  b.box(0.3, 0.7, 0.05, 0.05, 0.8, 0.05, C.woodDark, 0, 0, 0.12);
+  b.box(-0.2, 0.85, -0.14, 0.1, 0.34, 0.1, C.leather);
+  return h;
+}
+
+function wanderer(b: GeoBuilder, k: Kit): number {
+  const h = human(b, { kit: k, faction: 'greece', tunic: 0x7a6a4f });
+  // Walking staff and a shoulder bundle.
+  b.box(0.3, 0.55, 0.1, 0.05, 1.15, 0.05, C.woodLight);
+  b.box(-0.22, 0.95, -0.1, 0.24, 0.2, 0.2, 0x9c7f52, 0.5);
+  return h;
+}
+
+/** ---------------------------------------------------------------------------
  * Factory
  * ------------------------------------------------------------------------- */
 const cache = new Map<string, UnitModel>();
@@ -362,6 +467,24 @@ export function unitModel(type: UnitTypeId, faction: FactionId): UnitModel {
       break;
     case 'warship':
       height = warship(b, faction, k);
+      break;
+    case 'wolf':
+      height = wolf(b);
+      break;
+    case 'boar':
+      height = boar(b);
+      break;
+    case 'deer':
+      height = deer(b);
+      break;
+    case 'bandit':
+      height = bandit(b, BANDIT_KIT);
+      break;
+    case 'banditArcher':
+      height = banditArcher(b, BANDIT_KIT);
+      break;
+    case 'wanderer':
+      height = wanderer(b, BANDIT_KIT);
       break;
   }
   const model: UnitModel = { geo: b.build(), height };

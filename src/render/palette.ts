@@ -1,20 +1,20 @@
 /** Warm Mediterranean diorama palette shared by terrain, props and buildings. */
 export const C = {
   // Ground
-  sandLight: 0xe9d8b0,
-  sand: 0xdcc596,
-  sandDark: 0xc7ab79,
-  grass: 0x8a9d55,
+  sandLight: 0xefdda6,
+  sand: 0xe3c98b,
+  sandDark: 0xcaa963,
+  grass: 0x93ad4f,
   grassDark: 0x6f8546,
-  grassDry: 0xc6b478,
+  grassDry: 0xc9b365,
   dirt: 0xc4a878,
   path: 0xe6d7b0,
   rock: 0x9c968c,
   rockDark: 0x7c776f,
   rockLight: 0xb6b0a5,
   cliff: 0xa89d8b,
-  waterShallow: 0x53c9c4,
-  waterDeep: 0x1d76a4,
+  waterShallow: 0x4cc8bf,
+  waterDeep: 0x14708a,
   foam: 0xd6f0ec,
 
   // Materials

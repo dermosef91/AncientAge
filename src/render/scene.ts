@@ -35,12 +35,12 @@ import {
   SelectionRings,
 } from './effects';
 import { C } from './palette';
-import { carryModel, clearPropCache, decorationModel, nodeModel, scaffoldModel } from './props';
+import { carryModel, chestModel, clearPropCache, decorationModel, nodeModel, scaffoldModel } from './props';
 import { buildTerrain, type Polyline, type TerrainBuild } from './terrain';
 import { clearUnitCache, unitModel } from './units';
 import { RingGeometry, MeshBasicMaterial, DoubleSide } from 'three';
 
-export const TEAM_COLORS = [0x3fb8e8, 0xe8563f];
+export const TEAM_COLORS = [0x3fb8e8, 0xe8563f, 0xb9a06c];
 
 /** Sky, haze and sunlight per homeland. */
 const BIOME_AIR: Record<Biome, { sky: number; fog: number; sun: number }> = {
@@ -102,7 +102,7 @@ export class SceneRenderer {
   private distance = 52;
   private distanceGoal = 52;
   readonly minDistance = 22;
-  readonly maxDistance = 96;
+  readonly maxDistance = 132;
   private readonly yaw = 0.66;
   private readonly pitch = 0.735;
 
@@ -115,6 +115,8 @@ export class SceneRenderer {
   private carryPools = new Map<string, InstancePool>();
   private scaffoldPool!: InstancePool;
   private teamDiscs!: InstancePool;
+  private chestPool: InstancePool | null = null;
+  private chestShown: boolean[] = [];
 
   private unitVisuals = new Map<number, UnitVisual>();
   private buildingVisuals = new Map<number, BuildingVisual>();
@@ -156,9 +158,9 @@ export class SceneRenderer {
     this.renderer.toneMappingExposure = 1.0;
 
     this.scene.background = new Color(0x8fc6dd);
-    this.scene.fog = new Fog(0xaed4e0, 115, 240);
+    this.scene.fog = new Fog(0xaed4e0, 150, 330);
 
-    this.camera = new PerspectiveCamera(34, 1, 1, 400);
+    this.camera = new PerspectiveCamera(34, 1, 1, 540);
 
     // Warm key light with a cool sky fill - just enough ambient to keep the
     // shadow side readable without flattening the diorama.
@@ -210,7 +212,7 @@ export class SceneRenderer {
     (this.scene.fog as Fog).color.set(air.fog);
     this.sun.color.set(air.sun);
 
-    this.terrain = buildTerrain(game.grid, this.makePaths(game), game.biome);
+    this.terrain = buildTerrain(game.grid, this.makePaths(game), game.biomes);
     this.staticGroup.add(this.terrain.ground);
     this.staticGroup.add(this.terrain.water);
 
@@ -252,12 +254,12 @@ export class SceneRenderer {
       depthWrite: false,
       side: DoubleSide,
     });
-    this.teamDiscs = new InstancePool(discGeo, discMat, 160);
+    this.teamDiscs = new InstancePool(discGeo, discMat, 220);
     this.teamDiscs.mesh.renderOrder = 1;
     this.scene.add(this.teamDiscs.mesh);
 
     // Start the camera on the player's town centre.
-    const tc = game.buildingsOfPlayer(0).find((b) => b.type === 'towncenter');
+    const tc = game.buildingsOfPlayer(0).find((b) => b.def.main);
     if (tc) {
       this.target.set(tc.x, 0, tc.z + 6);
       this.targetGoal.copy(this.target);
@@ -267,43 +269,26 @@ export class SceneRenderer {
     this.updateCamera(1);
   }
 
-  /** Worn routes painted into the terrain colours. */
+  /**
+   * Worn routes painted into the terrain colours. Only the player's own base
+   * gets them: a road to the enemy — or tracks around their camp — would give
+   * away a position the player is supposed to *find*.
+   */
   private makePaths(game: Game): Polyline[] {
     const paths: Polyline[] = [];
-    const starts = game.starts;
-    // Main road between the two settlements, bent slightly for character.
-    const a = starts[0];
-    const b = starts[1];
-    const nx = -(b.z - a.z);
-    const nz = b.x - a.x;
-    const nlen = Math.hypot(nx, nz) || 1;
-    const bend = 12;
-    const road: Polyline = [];
-    for (let i = 0; i <= 10; i++) {
-      const t = i / 10;
-      const w = Math.sin(t * Math.PI);
-      road.push({
-        x: lerp(a.x, b.x, t) + (nx / nlen) * bend * w,
-        z: lerp(a.z, b.z, t) + (nz / nlen) * bend * w,
-      });
+    const s = game.starts[0];
+    const near = game.nodes
+      .filter((n) => n.type !== 'fish')
+      .map((n) => ({ n, d: Math.hypot(n.x - s.x, n.z - s.z) }))
+      .filter((e) => e.d < 26)
+      .sort((p, q) => p.d - q.d);
+    const picked: ResourceNode[] = [];
+    for (const e of near) {
+      if (picked.some((p) => Math.hypot(p.x - e.n.x, p.z - e.n.z) < 12)) continue;
+      picked.push(e.n);
+      if (picked.length >= 4) break;
     }
-    paths.push(road);
-
-    // Short spurs from each base out to its nearest resources.
-    for (const s of starts) {
-      const near = game.nodes
-        .filter((n) => n.type !== 'fish')
-        .map((n) => ({ n, d: Math.hypot(n.x - s.x, n.z - s.z) }))
-        .filter((e) => e.d < 26)
-        .sort((p, q) => p.d - q.d);
-      const picked: ResourceNode[] = [];
-      for (const e of near) {
-        if (picked.some((p) => Math.hypot(p.x - e.n.x, p.z - e.n.z) < 12)) continue;
-        picked.push(e.n);
-        if (picked.length >= 4) break;
-      }
-      for (const p of picked) paths.push([{ x: s.x, z: s.z }, { x: p.x, z: p.z }]);
-    }
+    for (const p of picked) paths.push([{ x: s.x, z: s.z }, { x: p.x, z: p.z }]);
     return paths;
   }
 
@@ -316,7 +301,7 @@ export class SceneRenderer {
     let pool = this.unitPools.get(key);
     if (!pool) {
       const model = unitModel(type as never, faction as never);
-      pool = new InstancePool(model.geo, this.solidMaterial(), 64, this.quality.shadows);
+      pool = new InstancePool(model.geo, this.solidMaterial(), 96, this.quality.shadows);
       this.unitPools.set(key, pool);
       this.scene.add(pool.mesh);
     }
@@ -328,7 +313,7 @@ export class SceneRenderer {
     let pool = this.buildingPools.get(key);
     if (!pool) {
       const model = buildingModel(type as never, faction as never, size);
-      pool = new InstancePool(model.geo, this.solidMaterial(), 30, this.quality.shadows);
+      pool = new InstancePool(model.geo, this.solidMaterial(), 48, this.quality.shadows);
       this.buildingPools.set(key, pool);
       this.scene.add(pool.mesh);
     }
@@ -340,7 +325,7 @@ export class SceneRenderer {
     let pool = this.nodePools.get(key);
     if (!pool) {
       const geo = nodeModel(type as never, variant);
-      pool = new InstancePool(geo, this.solidMaterial(), 120, this.quality.shadows && type !== 'fish');
+      pool = new InstancePool(geo, this.solidMaterial(), 320, this.quality.shadows && type !== 'fish');
       this.nodePools.set(key, pool);
       this.scene.add(pool.mesh);
     }
@@ -488,6 +473,7 @@ export class SceneRenderer {
     this.rings.begin();
     this.bars.begin();
     this.teamDiscCount = 0;
+    this.syncTreasures();
 
     this.syncNodes();
     this.syncBuildings(alpha);
@@ -539,6 +525,18 @@ export class SceneRenderer {
         this.unitVisuals.set(u.id, vis);
       }
       const pool = this.unitPool(faction, u.type);
+
+      // Fog of war: another player's unit is only drawn while watched.
+      if (u.owner !== 0 && !game.isEntityVisible(u)) {
+        pool.hide(vis.slot);
+        pool.flush(false);
+        if (vis.carrySlot >= 0 && vis.carryKey) {
+          this.carryPool(vis.carryKey).free(vis.carrySlot);
+          vis.carrySlot = -1;
+          vis.carryKey = '';
+        }
+        continue;
+      }
 
       const x = lerp(u.px, u.x, alpha);
       const z = lerp(u.pz, u.z, alpha);
@@ -652,8 +650,8 @@ export class SceneRenderer {
       }
       pool.setColor(vis.slot, _color);
 
-      // Team disc.
-      if (u.state !== 'dead' && this.teamDiscCount < this.teamDiscs.capacity) {
+      // Team disc. The wilds carry none — a wolf is nobody's soldier.
+      if (u.state !== 'dead' && u.owner < 2 && this.teamDiscCount < this.teamDiscs.capacity) {
         this.teamDiscs.place(this.teamDiscCount, x, (naval ? 0.03 : game.grid.heightAt(x, z)) + 0.045, z, 0, u.def.radius * 1.35);
         this.teamDiscs.setColor(this.teamDiscCount, TEAM_COLORS[u.owner]);
         this.teamDiscCount++;
@@ -734,6 +732,18 @@ export class SceneRenderer {
 
     for (const b of game.buildings) {
       seen.add(b.id);
+      // Fog of war: hold off even allocating until first sighting.
+      if (b.owner !== 0 && !game.isEntityVisible(b)) {
+        const hidden = this.buildingVisuals.get(b.id);
+        if (hidden) {
+          const pool = this.buildingPools.get(hidden.key);
+          if (pool) {
+            pool.hide(hidden.slot);
+            pool.flush(false);
+          }
+        }
+        continue;
+      }
       const faction = game.player(b.owner).faction;
       const key = `${faction}|${b.type}`;
       let vis = this.buildingVisuals.get(b.id);
@@ -840,6 +850,37 @@ export class SceneRenderer {
   }
 
   /** ---------------------------------------------------------------------
+   * Treasures
+   * ------------------------------------------------------------------- */
+  private syncTreasures(): void {
+    const game = this.game;
+    if (game.treasures.length === 0) return;
+    if (!this.chestPool) {
+      this.chestPool = new InstancePool(chestModel(), this.solidMaterial(), game.treasures.length, this.quality.shadows);
+      this.scene.add(this.chestPool.mesh);
+      this.chestPool.setCount(game.treasures.length);
+      game.treasures.forEach((_, i) => this.chestPool!.hide(i));
+      this.chestShown = game.treasures.map(() => false);
+      this.chestPool.flush(true);
+    }
+    // A chest surfaces once its ground is explored and sinks when claimed —
+    // only state *transitions* touch the instance buffer.
+    let dirty = false;
+    game.treasures.forEach((t, i) => {
+      const show = !t.taken && (t.spotted || game.isExploredAt(t.x, t.z));
+      if (show === this.chestShown[i]) return;
+      this.chestShown[i] = show;
+      if (show) {
+        this.chestPool!.place(i, t.x, game.grid.heightAt(t.x, t.z), t.z, (t.id % 16) * 0.4, 1);
+      } else {
+        this.chestPool!.hide(i);
+      }
+      dirty = true;
+    });
+    if (dirty) this.chestPool.flush(false);
+  }
+
+  /** ---------------------------------------------------------------------
    * Resource nodes
    * ------------------------------------------------------------------- */
   private syncNodes(): void {
@@ -850,6 +891,9 @@ export class SceneRenderer {
       seen.add(n.id);
       const key = `node-${n.type}-${n.variant & 3}`;
       let vis = this.nodeVisuals.get(n.id);
+      // Fog of war: a node materialises the first time its ground is seen,
+      // and — being scenery — stays drawn from then on.
+      if (!vis && !game.isExploredAt(n.x, n.z)) continue;
       if (!vis) {
         const pool = this.nodePool(n.type, n.variant & 3);
         const slot = pool.alloc();
@@ -1119,6 +1163,13 @@ export class SceneRenderer {
     if (this.scaffoldPool) {
       this.scene.remove(this.scaffoldPool.mesh);
       this.scaffoldPool.dispose();
+    }
+    if (this.chestPool) {
+      this.scene.remove(this.chestPool.mesh);
+      (this.chestPool.mesh.material as Material).dispose();
+      this.chestPool.mesh.dispose();
+      this.chestPool = null;
+      this.chestShown = [];
     }
     if (this.teamDiscs) {
       this.scene.remove(this.teamDiscs.mesh);

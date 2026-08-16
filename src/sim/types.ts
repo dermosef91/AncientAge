@@ -21,9 +21,18 @@ export type UnitTypeId =
   | 'hoplite'
   | 'legionary'
   | 'fishingBoat'
-  | 'warship';
+  | 'warship'
+  // Wilds — owned by the gaia player, never trained.
+  | 'wolf'
+  | 'boar'
+  | 'deer'
+  | 'bandit'
+  | 'banditArcher'
+  | 'wanderer';
 
 export type BuildingTypeId =
+  | 'camp'
+  | 'tent'
   | 'towncenter'
   | 'house'
   | 'farm'
@@ -36,7 +45,11 @@ export type BuildingTypeId =
   | 'dock';
 
 export type TechId =
-  | 'bronzeAge'
+  | 'toHamlet'
+  | 'toVillage'
+  | 'toTown'
+  | 'toCity'
+  | 'toMetropolis'
   | 'wheel'
   | 'irrigation'
   | 'bronzeWeapons'
@@ -44,8 +57,11 @@ export type TechId =
   | 'masonry'
   | 'doctrine';
 
-/** `farm` nodes are invisible harvest points owned by a Farm building. */
-export type NodeTypeId = 'tree' | 'berry' | 'gold' | 'stone' | 'fish' | 'farm';
+/**
+ * `farm` nodes are invisible harvest points owned by a Farm building.
+ * `carcass` is the food a hunted animal leaves on the ground.
+ */
+export type NodeTypeId = 'tree' | 'berry' | 'gold' | 'stone' | 'fish' | 'farm' | 'carcass';
 
 /** Unit behavioural class - drives movement domain and AI role. */
 export type UnitRole = 'worker' | 'melee' | 'ranged' | 'naval' | 'navalWorker';
@@ -80,6 +96,16 @@ export interface UnitDef {
   /** Villager-style: can construct, gather and repair. */
   canBuild?: boolean;
   canGather?: boolean;
+  /** Minimum settlement level to train this unit. */
+  age?: number;
+  /**
+   * How the wilds treat this unit (gaia-owned only). Hostile creatures pick
+   * fights; passive ones only defend themselves; friendly ones are never
+   * auto-targeted and never fight.
+   */
+  stance?: 'hostile' | 'passive' | 'friendly';
+  /** Food left on the ground when this creature dies. */
+  carcassFood?: number;
   /** Description shown in the selection panel. */
   blurb: string;
 }
@@ -104,12 +130,14 @@ export interface BuildingDef {
   attack?: number;
   range?: number;
   attackSpeed?: number;
-  /** Requires Bronze Age. */
+  /** Minimum settlement level to place this building. */
   age?: number;
   /** Must be placed on/adjacent to water. */
   water?: boolean;
   /** Farms hold a finite food store. */
   storesFood?: number;
+  /** A settlement heart — lose every one of these and the match is lost. */
+  main?: boolean;
   blurb: string;
 }
 
@@ -120,7 +148,14 @@ export interface TechDef {
   time: number;
   /** Tech that must be researched first. */
   requires?: TechId;
+  /** Minimum settlement level to research. */
   age?: number;
+  /** Settlement upgrade: the level this research advances the player to. */
+  advancesTo?: number;
+  /** Buildings that must stand complete before this can be researched. */
+  prereqBuildings?: BuildingTypeId[];
+  /** Population the settlement must have reached. */
+  prereqPop?: number;
   blurb: string;
 }
 
@@ -306,7 +341,7 @@ export interface Projectile {
   dead: boolean;
 }
 
-export type PlayerKind = 'human' | 'ai';
+export type PlayerKind = 'human' | 'ai' | 'gaia';
 
 export interface Player {
   index: number;
@@ -343,4 +378,12 @@ export type GameEvent =
   | { type: 'research-complete'; player: number; tech: TechId }
   | { type: 'age-up'; player: number; age: number }
   | { type: 'under-attack'; player: number; x: number; z: number }
-  | { type: 'game-over'; winner: number };
+  | {
+      type: 'discovery';
+      player: number;
+      x: number;
+      z: number;
+      text: string;
+      flavor: 'treasure' | 'friend' | 'danger' | 'reward';
+    }
+  | { type: 'game-over'; winner: number; cultural?: boolean };

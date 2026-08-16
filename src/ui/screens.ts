@@ -183,7 +183,7 @@ export class Screens {
    * ------------------------------------------------------------------- */
   showPause(state: { sound: boolean; shadows: boolean; player: Player }): void {
     const f = FACTIONS[state.player.faction];
-    const techOrder: TechId[] = ['bronzeAge', 'wheel', 'irrigation', 'bronzeWeapons', 'fletching', 'masonry', 'doctrine'];
+    const techOrder: TechId[] = ['toHamlet', 'toVillage', 'toTown', 'toCity', 'toMetropolis', 'wheel', 'irrigation', 'bronzeWeapons', 'fletching', 'masonry', 'doctrine'];
     const techs = techOrder
       .map((t) => {
         const def = TECHS[t];
@@ -191,7 +191,7 @@ export class Screens {
         const name = t === 'doctrine' ? f.doctrineName : def.name;
         const blurb = t === 'doctrine' ? f.doctrineText : def.blurb;
         return `<div class="tech-row">
-          ${icon(t === 'bronzeAge' ? 'age' : 'research')}
+          ${icon(TECHS[t].advancesTo ? 'age' : 'research')}
           <div class="info"><b>${name}</b><span>${blurb}</span></div>
           <div class="state ${done ? '' : 'pending'}">${done ? 'Done' : 'Locked'}</div>
         </div>`;

@@ -2,11 +2,14 @@ import { Domain, Grid, PathFinder, TILE } from './grid';
 import { clamp, dist, dist2 } from '../core/math';
 import { Rng } from '../core/rng';
 import {
-  ABSOLUTE_POP_CAP,
+  MAX_LEVEL,
+  levelName,
+  levelPopCap,
   BUILDINGS,
   BUILD_RANGE,
   DEPOSIT_RANGE,
   ELITE_BUILDING,
+  ELITE_LEVEL,
   FACTIONS,
   FARM_FOOD,
   GATHER_RATE,
@@ -22,7 +25,7 @@ import {
   refundCost,
 } from './data';
 
-import { generateMap, type Biome, type Decoration } from './mapgen';
+import { generateMap, type Biome, type Decoration, type EncounterSpawn } from './mapgen';
 import type {
   Building,
   BuildingTypeId,
@@ -30,6 +33,7 @@ import type {
   FactionId,
   GameEvent,
   Player,
+  PlayerKind,
   Projectile,
   ResourceKind,
   ResourceNode,
@@ -39,6 +43,8 @@ import type {
 } from './types';
 
 const PROJECTILE_SPEED = 24;
+/** Player index that owns the wilds — animals, bandits, wanderers. */
+export const GAIA = 2;
 /** Path computations allowed per simulation tick. */
 const PATH_BUDGET = 26;
 const HASH_CELL = 4;
@@ -100,11 +106,34 @@ export class Game {
   readonly pathfinder: PathFinder;
   readonly decorations: Decoration[];
   readonly biome: Biome;
+  /** Region biome per tile — see BIOME_INDEX in mapgen. */
+  readonly biomes: Uint8Array;
   readonly starts: { x: number; z: number }[];
+  /** Wild encounter sites chosen by mapgen, spawned by the sim. */
+  readonly encounterSpawns: EncounterSpawn[];
   readonly seed: number;
 
   units: Unit[] = [];
   buildings: Building[] = [];
+  /** Chests and gifts waiting in the wilds. */
+  treasures: {
+    id: number;
+    x: number;
+    z: number;
+    kind: 'chest' | 'merchant';
+    taken: boolean;
+    /** Spawned inside a bandit camp — expect a fight. */
+    guarded?: boolean;
+    /** The human player has laid eyes on it. */
+    spotted?: boolean;
+  }[] = [];
+  /** Fog of war for the human player: tiles ever seen, and tiles seen now. */
+  readonly explored: Uint8Array;
+  private visibleMask: Uint8Array;
+  /** Enemy/wild buildings the human player has laid eyes on at least once. */
+  private seenEntities = new Set<number>();
+  exploredCount = 0;
+  landTileCount = 0;
   nodes: ResourceNode[] = [];
   projectiles: Projectile[] = [];
   entities = new Map<number, Entity>();
@@ -126,28 +155,46 @@ export class Game {
 
   constructor(playerFaction: FactionId, enemyFaction: FactionId, seed = Math.floor(Math.random() * 1e9)) {
     this.seed = seed;
-    // The island takes after the player's homeland.
-    const map = generateMap(seed, playerFaction);
+    // Each settlement's founding ground takes after its own homeland.
+    const map = generateMap(seed, playerFaction, enemyFaction);
     this.grid = map.grid;
     this.pathfinder = new PathFinder(this.grid);
     this.decorations = map.decorations;
     this.biome = map.biome;
+    this.biomes = map.biomes;
     this.starts = map.starts;
+    this.encounterSpawns = map.encounters;
     this.nodes = map.nodes;
-    for (const n of this.nodes) this.nodeById.set(n.id, n);
+    let maxNodeId = 0;
+    for (const n of this.nodes) {
+      this.nodeById.set(n.id, n);
+      if (n.id > maxNodeId) maxNodeId = n.id;
+    }
+    this.nextId = Math.max(1000, maxNodeId + 1);
     this.rng = new Rng(seed ^ 0x9e3779b9);
+    this.explored = new Uint8Array(this.grid.size * this.grid.size);
+    this.visibleMask = new Uint8Array(this.grid.size * this.grid.size);
+    for (let i = 0; i < this.grid.terrain.length; i++) {
+      if (this.grid.terrain[i] !== 0 && this.grid.terrain[i] !== 1) this.landTileCount++;
+    }
 
     this.players = [
       this.makePlayer(0, 'human', playerFaction),
       this.makePlayer(1, 'ai', enemyFaction),
+      // The wilds: wolves, bandits and wanderers all belong to this player.
+      this.makePlayer(GAIA, 'gaia', 'greece'),
     ];
     this.mods = this.players.map(() => baseMods());
     this.players.forEach((p) => this.recomputeMods(p.index));
 
-    this.players.forEach((p, i) => this.setupStart(p, map.starts[i]));
+    this.players.forEach((p, i) => {
+      if (p.kind !== 'gaia') this.setupStart(p, map.starts[i]);
+    });
+    this.spawnEncounters();
+    this.updateVisibility();
   }
 
-  private makePlayer(index: number, kind: 'human' | 'ai', faction: FactionId): Player {
+  private makePlayer(index: number, kind: PlayerKind, faction: FactionId): Player {
     return {
       index,
       kind,
@@ -163,10 +210,10 @@ export class Game {
   }
 
   private setupStart(p: Player, start: { x: number; z: number }): void {
-    const size = BUILDINGS.towncenter.size;
+    const size = BUILDINGS.camp.size;
     const gx = this.grid.tileX(start.x) - Math.floor(size / 2);
     const gz = this.grid.tileZ(start.z) - Math.floor(size / 2);
-    const tc = this.createBuilding(p.index, 'towncenter', gx, gz, true);
+    const tc = this.createBuilding(p.index, 'camp', gx, gz, true);
     if (tc) {
       tc.rallyX = tc.x + (p.index === 0 ? 0 : 0);
       tc.rallyZ = tc.z + 5;
@@ -179,6 +226,257 @@ export class Game {
       this.spawnUnit(p.index, 'villager', px, pz);
     }
     this.recomputePop(p.index);
+  }
+
+  /** ---------------------------------------------------------------------
+   * The wilds: encounter spawning, treasures, and creature behaviour
+   * ------------------------------------------------------------------- */
+  private spawnEncounters(): void {
+    for (const e of this.encounterSpawns) {
+      switch (e.kind) {
+        case 'wolves': {
+          const n = 2 + this.rng.int(0, 1);
+          for (let i = 0; i < n; i++) {
+            this.spawnWild('wolf', e.x + this.rng.spread(2.5), e.z + this.rng.spread(2.5));
+          }
+          break;
+        }
+        case 'boars':
+          this.spawnWild('boar', e.x, e.z);
+          if (this.rng.bool(0.4)) this.spawnWild('boar', e.x + this.rng.spread(2.5), e.z + this.rng.spread(2.5));
+          break;
+        case 'deer': {
+          const n = 2 + this.rng.int(0, 2);
+          for (let i = 0; i < n; i++) {
+            this.spawnWild('deer', e.x + this.rng.spread(3), e.z + this.rng.spread(3));
+          }
+          break;
+        }
+        case 'bandits': {
+          const n = 2 + this.rng.int(0, 1);
+          for (let i = 0; i < n; i++) {
+            this.spawnWild('bandit', e.x + this.rng.spread(2.5), e.z + this.rng.spread(2.5));
+          }
+          this.spawnWild('banditArcher', e.x + this.rng.spread(2), e.z + this.rng.spread(2));
+          // The hoard they are guarding.
+          this.treasures.push({ id: this.nextId++, x: e.x, z: e.z, kind: 'chest', taken: false, guarded: true });
+          break;
+        }
+        case 'treasure':
+          this.treasures.push({ id: this.nextId++, x: e.x, z: e.z, kind: 'chest', taken: false });
+          break;
+        case 'merchant':
+          this.treasures.push({ id: this.nextId++, x: e.x, z: e.z, kind: 'merchant', taken: false });
+          break;
+        case 'wanderer':
+          this.spawnWild('wanderer', e.x, e.z);
+          break;
+      }
+    }
+  }
+
+  private spawnWild(type: UnitTypeId, x: number, z: number): Unit | null {
+    // Keep creatures off water and rock.
+    if (!this.grid.passableWorld(x, z, 'land')) {
+      const near = this.grid.nearestPassable(this.grid.tileX(x), this.grid.tileZ(z), 'land', 6);
+      if (!near) return null;
+      x = this.grid.worldX(near.gx);
+      z = this.grid.worldZ(near.gz);
+    }
+    return this.spawnUnit(GAIA, type, x, z);
+  }
+
+  /**
+   * May `attackerOwner` auto-engage `target`? The wilds are not a nation:
+   * hostile creatures are fair game both ways, passive ones are left alone
+   * until someone orders the hunt, and friendly ones are never engaged.
+   */
+  isHostile(attackerOwner: number, target: Entity): boolean {
+    if (target.kind === 'unit' && this.players[target.owner]?.kind === 'gaia') {
+      return target.def.stance === 'hostile';
+    }
+    if (this.players[attackerOwner]?.kind === 'gaia') {
+      return this.players[target.owner]?.kind !== 'gaia';
+    }
+    return attackerOwner !== target.owner;
+  }
+
+  /** ---------------------------------------------------------------------
+   * Fog of war (human player only)
+   * ------------------------------------------------------------------- */
+  private stampSight(wx: number, wz: number, r: number): void {
+    const N = this.grid.size;
+    const cx = this.grid.tileX(wx);
+    const cz = this.grid.tileZ(wz);
+    const rr = r * r;
+    const zlo = Math.max(0, cz - r);
+    const zhi = Math.min(N - 1, cz + r);
+    const xlo = Math.max(0, cx - r);
+    const xhi = Math.min(N - 1, cx + r);
+    for (let gz = zlo; gz <= zhi; gz++) {
+      const dz = gz - cz;
+      for (let gx = xlo; gx <= xhi; gx++) {
+        const dx = gx - cx;
+        if (dx * dx + dz * dz > rr) continue;
+        const i = gz * N + gx;
+        this.visibleMask[i] = 1;
+        if (!this.explored[i]) {
+          this.explored[i] = 1;
+          // The progress meter divides by land tiles, so count land only.
+          const t = this.grid.terrain[i];
+          if (t !== 0 && t !== 1) this.exploredCount++;
+        }
+      }
+    }
+  }
+
+  private updateVisibility(): void {
+    this.visibleMask.fill(0);
+    for (const u of this.units) {
+      if (u.owner !== 0 || u.state === 'dead') continue;
+      this.stampSight(u.x, u.z, 9);
+    }
+    for (const b of this.buildings) {
+      if (b.owner !== 0 || b.dead) continue;
+      this.stampSight(b.x, b.z, b.complete ? 8 + b.size : 5);
+    }
+
+    // First sightings are worth announcing.
+    for (const t of this.treasures) {
+      if (t.spotted || t.taken) continue;
+      if (!this.isVisibleAt(t.x, t.z)) continue;
+      t.spotted = true;
+      const text = t.guarded
+        ? 'A bandit hoard — its guards look unfriendly'
+        : t.kind === 'merchant'
+          ? 'A merchant camp welcomes your people'
+          : 'You spot an unclaimed treasure';
+      this.events.push({
+        type: 'discovery',
+        player: 0,
+        x: t.x,
+        z: t.z,
+        text,
+        flavor: t.guarded ? 'danger' : t.kind === 'merchant' ? 'friend' : 'treasure',
+      });
+    }
+  }
+
+  isExploredAt(x: number, z: number): boolean {
+    const gx = this.grid.tileX(x);
+    const gz = this.grid.tileZ(z);
+    if (!this.grid.inBounds(gx, gz)) return false;
+    return this.explored[gz * this.grid.size + gx] !== 0;
+  }
+
+  isVisibleAt(x: number, z: number): boolean {
+    const gx = this.grid.tileX(x);
+    const gz = this.grid.tileZ(z);
+    if (!this.grid.inBounds(gx, gz)) return false;
+    return this.visibleMask[gz * this.grid.size + gx] !== 0;
+  }
+
+  /**
+   * Should the human player's renderer draw this entity? Own things always;
+   * foreign units only while watched; foreign buildings stay once discovered.
+   */
+  isEntityVisible(e: Entity): boolean {
+    if (e.owner === 0) return true;
+    if (e.kind === 'building') {
+      if (this.seenEntities.has(e.id)) return true;
+      if (this.isVisibleAt(e.x, e.z)) {
+        this.seenEntities.add(e.id);
+        return true;
+      }
+      return false;
+    }
+    return this.isVisibleAt(e.x, e.z);
+  }
+
+  /** Treasure pickup + wanderer recruitment + idle wildlife wandering. */
+  private tickWilds(): void {
+    // Treasures claim to whoever walks over them.
+    for (const t of this.treasures) {
+      if (t.taken) continue;
+      let claimant: Unit | null = null;
+      this.forEachNearby(t.x, t.z, 2.6, (u) => {
+        if (claimant || u.state === 'dead') return;
+        if (this.players[u.owner]?.kind === 'gaia') return;
+        if (dist2(u.x, u.z, t.x, t.z) <= 2.6 * 2.6) claimant = u;
+      });
+      if (!claimant) continue;
+      t.taken = true;
+      const p = this.players[(claimant as Unit).owner];
+      let text: string;
+      if (t.kind === 'merchant') {
+        const gold = 130 + this.rng.int(0, 60);
+        p.res.gold += gold;
+        text = `A grateful merchant pays ${gold} gold for safe roads`;
+      } else {
+        const roll = this.rng.int(0, 3);
+        const kinds: ResourceKind[] = ['gold', 'food', 'wood', 'stone'];
+        const amounts = [90 + this.rng.int(0, 60), 110 + this.rng.int(0, 60), 130 + this.rng.int(0, 60), 90 + this.rng.int(0, 50)];
+        const kind = kinds[roll];
+        const amount = amounts[roll];
+        p.res[kind] += amount;
+        p.stats.gathered += amount;
+        text = `Treasure found: ${amount} ${kind}`;
+      }
+      this.events.push({
+        type: 'discovery',
+        player: p.index,
+        x: t.x,
+        z: t.z,
+        text,
+        flavor: t.kind === 'merchant' ? 'reward' : 'treasure',
+      });
+    }
+
+    // Creature idle behaviour, spread across ticks.
+    for (const u of this.units) {
+      if (u.owner !== GAIA || u.state === 'dead') continue;
+      if (((this.tickCount / 10) | 0) % 9 !== u.id % 9) continue;
+
+      // Wanderers join the first settlement that finds them.
+      if (u.type === 'wanderer') {
+        let found: Unit | null = null;
+        this.forEachNearby(u.x, u.z, 4, (o) => {
+          if (found || o.state === 'dead') return;
+          if (this.players[o.owner]?.kind === 'gaia') return;
+          if (dist2(o.x, o.z, u.x, u.z) > 4 * 4) return;
+          found = o;
+        });
+        if (found) {
+          const owner = (found as Unit).owner;
+          u.state = 'dead';
+          u.deathTimer = 0.01;
+          const v = this.spawnUnit(owner, 'villager', u.x, u.z);
+          if (v) {
+            this.recomputePop(owner);
+            this.events.push({
+              type: 'discovery',
+              player: owner,
+              x: u.x,
+              z: u.z,
+              text: 'A wanderer joins your settlement',
+              flavor: 'friend',
+            });
+          }
+          continue;
+        }
+      }
+
+      // Idle creatures drift around their home ground.
+      if (u.state === 'idle' && this.rng.bool(0.55)) {
+        const wx = u.guardX + this.rng.spread(6);
+        const wz = u.guardZ + this.rng.spread(6);
+        if (this.grid.passableWorld(wx, wz, 'land')) {
+          // Predators keep their eyes open while roaming; prey just grazes.
+          this.commandMove([u], wx, wz, u.def.stance === 'hostile');
+          u.ordered = false;
+        }
+      }
+    }
   }
 
   /** ---------------------------------------------------------------------
@@ -221,6 +519,11 @@ export class Game {
   recomputeMods(pi: number): void {
     const p = this.players[pi];
     const m = baseMods();
+    // The wilds are no civilisation: no passives, no techs, no level bonuses.
+    if (p.kind === 'gaia') {
+      this.mods[pi] = m;
+      return;
+    }
     const f = p.faction;
 
     if (f === 'egypt') m.foodRateMul *= 1.15;
@@ -234,7 +537,8 @@ export class Game {
       m.buildingHpMul *= 1.2;
     }
 
-    if (p.techs.has('bronzeAge')) m.unitHpAdd += 10;
+    // Every settlement level past Camp toughens the citizenry a little.
+    m.unitHpAdd += (p.age - 1) * 5;
     if (p.techs.has('wheel')) m.villagerSpeedMul *= 1.2;
     if (p.techs.has('irrigation')) m.foodRateMul *= 1.3;
     if (p.techs.has('bronzeWeapons')) {
@@ -482,7 +786,7 @@ export class Game {
       if (b.owner === pi && b.complete && !b.dead) cap += b.def.popCap ?? 0;
     }
     p.pop = pop;
-    p.popCap = Math.min(cap, ABSOLUTE_POP_CAP);
+    p.popCap = Math.min(cap, levelPopCap(p.age));
   }
 
   /** ---------------------------------------------------------------------
@@ -619,9 +923,12 @@ export class Game {
     if (!b.complete) return { ok: false, reason: 'Under construction' };
     if (b.queue.length >= 6) return { ok: false, reason: 'Queue full' };
     if (this.isElite(p, type)) {
-      if (p.age < 2) return { ok: false, reason: 'Requires Bronze Age' };
+      if (p.age < ELITE_LEVEL) return { ok: false, reason: `Requires ${levelName(ELITE_LEVEL)}` };
       if (!this.hasCompleteBuilding(p.index, 'monument')) return { ok: false, reason: 'Requires Monument' };
       if (ELITE_BUILDING[p.faction] !== b.type) return { ok: false, reason: 'Wrong building' };
+    }
+    if ((UNITS[type].age ?? 1) > p.age) {
+      return { ok: false, reason: `Requires ${levelName(UNITS[type].age ?? 1)}` };
     }
     if (!canAfford(p.res, UNITS[type].cost)) return { ok: false, reason: 'Not enough resources' };
     return { ok: true };
@@ -650,8 +957,21 @@ export class Game {
     if (p.techs.has(tech)) return { ok: false, reason: 'Already researched' };
     if (b.research) return { ok: false, reason: 'Busy' };
     const def = TECHS[tech];
-    if ((def.age ?? 1) > p.age) return { ok: false, reason: 'Requires Bronze Age' };
-    if (tech === 'bronzeAge' && p.age >= 2) return { ok: false, reason: 'Already advanced' };
+    if ((def.age ?? 1) > p.age) return { ok: false, reason: `Requires ${levelName(def.age ?? 1)}` };
+    if (def.advancesTo) {
+      if (p.age >= def.advancesTo) return { ok: false, reason: 'Already advanced' };
+      if (def.requires && !p.techs.has(def.requires)) {
+        return { ok: false, reason: `Requires ${TECHS[def.requires].name}` };
+      }
+      if (def.prereqPop && p.pop < def.prereqPop) {
+        return { ok: false, reason: `Needs ${def.prereqPop} population` };
+      }
+      for (const need of def.prereqBuildings ?? []) {
+        if (!this.hasCompleteBuilding(p.index, need)) {
+          return { ok: false, reason: `Needs a ${BUILDINGS[need].name}` };
+        }
+      }
+    }
     // Only one research of a given tech at a time across the empire.
     for (const other of this.buildings) {
       if (other.owner === p.index && other.research?.tech === tech) {
@@ -707,9 +1027,18 @@ export class Game {
     const prevBuildingMul = this.mods[p.index].buildingHpMul;
     const prevEliteHp = this.mods[p.index].eliteHp;
     p.techs.add(tech);
-    if (tech === 'bronzeAge') {
-      p.age = 2;
-      this.events.push({ type: 'age-up', player: p.index, age: 2 });
+    const adv = TECHS[tech].advancesTo;
+    if (adv) {
+      p.age = adv;
+      this.events.push({ type: 'age-up', player: p.index, age: adv });
+      // Raising the Metropolis is itself a victory: the settlement wins the
+      // land not by burning the rival out but by outgrowing them.
+      if (adv >= MAX_LEVEL && !this.over) {
+        this.over = true;
+        this.winner = p.index;
+        for (const other of this.players) if (other.index !== p.index) other.defeated = true;
+        this.events.push({ type: 'game-over', winner: p.index, cultural: true });
+      }
     }
     this.recomputeMods(p.index);
     const m = this.mods[p.index];
@@ -758,12 +1087,17 @@ export class Game {
     for (const b of this.buildings) this.updateBuilding(b, dt);
     this.updateProjectiles(dt);
     this.separateUnits();
-    this.cleanup();
 
+    // The wilds and visibility read the spatial hash, whose indices point
+    // into the tick-start units array — so they must run before cleanup()
+    // replaces that array.
+    if (this.tickCount % 5 === 0) this.updateVisibility();
     if (this.tickCount % 10 === 0) {
-      this.recomputePop(0);
-      this.recomputePop(1);
+      for (const p of this.players) this.recomputePop(p.index);
+      this.tickWilds();
     }
+
+    this.cleanup();
     this.checkVictory();
   }
 
@@ -882,6 +1216,8 @@ export class Game {
   /** How far an idle unit will look for something to hit. */
   private idleGuardRange(u: Unit): number {
     if (u.def.attack <= 0) return 0;
+    // Passive and friendly wilds never start a fight — they only answer one.
+    if (this.players[u.owner]?.kind === 'gaia' && u.def.stance !== 'hostile') return 0;
     return u.def.aggroRange > 0 ? u.def.aggroRange : VILLAGER_GUARD_RANGE;
   }
 
@@ -918,9 +1254,12 @@ export class Game {
 
     // A fight the player did not ask for is leashed to where it started, so a
     // fleeing enemy cannot walk the whole settlement away from its work.
+    // Passive wilds have no guard radius, but once struck they still need a
+    // real leash — otherwise the zero radius cancels their retaliation at once.
     if (!u.ordered) {
-      const leash = this.idleGuardRange(u) * LEASH_FACTOR;
-      if (dist2(u.guardX, u.guardZ, u.x, u.z) > leash * leash) {
+      const guardR = this.idleGuardRange(u) || (this.players[u.owner]?.kind === 'gaia' ? 7 : 0);
+      const leash = guardR * LEASH_FACTOR;
+      if (leash > 0 && dist2(u.guardX, u.guardZ, u.x, u.z) > leash * leash) {
         u.targetId = 0;
         u.state = 'idle';
         this.commandMove([u], u.guardX, u.guardZ, false);
@@ -1060,6 +1399,7 @@ export class Game {
     const naval = this.domainOf(u) === 'water';
     this.forEachNearby(u.x, u.z, radius, (o) => {
       if (o.owner === u.owner || o.state === 'dead') return;
+      if (!this.isHostile(u.owner, o)) return;
       // Land melee cannot reach boats and vice versa.
       const otherNaval = this.domainOf(o) === 'water';
       if (naval !== otherNaval && this.statRange(u) < 1.5) return;
@@ -1071,7 +1411,8 @@ export class Game {
     });
     if (best) return best;
     if (naval) return null;
-    // Fall back to buildings only when actively pushing forward.
+    // Creatures never siege; and the fallback only applies when pushing.
+    if (this.players[u.owner]?.kind === 'gaia') return null;
     if (u.state !== 'attackMove') return null;
     for (const b of this.buildings) {
       if (b.owner === u.owner || b.dead) continue;
@@ -1384,6 +1725,7 @@ export class Game {
         let bestD = Infinity;
         this.forEachNearby(b.x, b.z, range + 2, (o) => {
           if (o.owner === b.owner || o.state === 'dead') return;
+          if (!this.isHostile(b.owner, o)) return;
           const d = dist2(b.x, b.z, o.x, o.z);
           if (d < bestD && d <= range * range) {
             bestD = d;
@@ -1444,12 +1786,26 @@ export class Game {
     });
 
     const attackerOwner = source ? source.owner : ownerOverride;
+    // Only the rival raises the settlement alarm — a boar bite on a hunt
+    // should not eat the 12-second alarm cooldown a real raid needs.
     if (target.owner === 0 && attackerOwner === 1) this.notifyUnderAttack(target.x, target.z);
 
-    // Villagers and idle troops fight back.
-    if (target.kind === 'unit' && target.state === 'idle' && source && target.def.attack > 0) {
-      target.targetId = source.id;
-      target.state = 'chase';
+    // Villagers and idle troops fight back. A grazing creature does too —
+    // except the deer, which bolts.
+    if (target.kind === 'unit' && source) {
+      const gaia = this.players[target.owner]?.kind === 'gaia';
+      const receptive = target.state === 'idle' || (gaia && target.state === 'move' && !target.ordered);
+      if (receptive && target.def.attack > 0) {
+        target.targetId = source.id;
+        target.state = 'chase';
+      } else if (receptive && gaia && target.def.attack <= 0 && target.def.stance !== 'friendly') {
+        // Flee directly away from the attacker.
+        const d = Math.max(0.1, dist(target.x, target.z, source.x, source.z));
+        const fx = target.x + ((target.x - source.x) / d) * 14;
+        const fz = target.z + ((target.z - source.z) / d) * 14;
+        this.commandMove([target], fx, fz, false);
+        target.ordered = false;
+      }
     }
 
     if (target.hp <= 0) {
@@ -1474,6 +1830,27 @@ export class Game {
     this.players[u.owner].stats.unitsLost++;
     if (killerOwner >= 0) this.players[killerOwner].stats.kills++;
     this.events.push({ type: 'unit-died', unit: u, x: u.x, z: u.z });
+    // A hunted animal becomes food on the ground where it fell.
+    if ((u.def.carcassFood ?? 0) > 0) {
+      const amount = u.def.carcassFood!;
+      const node: ResourceNode = {
+        id: this.nextId++,
+        kind: 'node',
+        type: 'carcass',
+        resource: 'food',
+        x: u.x,
+        z: u.z,
+        amount,
+        maxAmount: amount,
+        workers: 0,
+        radius: 0.7,
+        variant: u.type === 'boar' ? 0 : 1,
+        depleted: false,
+        fadeTimer: 0,
+      };
+      this.nodes.push(node);
+      this.nodeById.set(node.id, node);
+    }
     this.recomputePop(u.owner);
   }
 
@@ -1743,7 +2120,7 @@ export class Game {
     if (this.over) return;
     for (const p of this.players) {
       if (p.defeated) continue;
-      const hasTc = this.buildings.some((b) => b.owner === p.index && b.type === 'towncenter' && !b.dead);
+      const hasTc = this.buildings.some((b) => b.owner === p.index && b.def.main && !b.dead);
       if (!hasTc) p.defeated = true;
     }
     const alive = this.players.filter((p) => !p.defeated);
@@ -1771,6 +2148,7 @@ export class Game {
     let bestD = Infinity;
     for (const u of this.units) {
       if (u.state === 'dead') continue;
+      if (u.owner !== 0 && !this.isEntityVisible(u)) continue;
       const d = dist(u.x, u.z, x, z) - u.def.radius;
       if (d < bestD && d < maxDist) {
         bestD = d;
@@ -1780,6 +2158,7 @@ export class Game {
     if (best && bestD < 0.9) return best;
     for (const b of this.buildings) {
       if (b.dead) continue;
+      if (b.owner !== 0 && !this.isEntityVisible(b)) continue;
       const half = (b.size * TILE) / 2;
       const dx = Math.abs(b.x - x) - half;
       const dz = Math.abs(b.z - z) - half;
@@ -1819,6 +2198,7 @@ export class Game {
     let bestD = Infinity;
     for (const n of this.nodes) {
       if (n.depleted || n.type === 'farm') continue;
+      if (!this.isExploredAt(n.x, n.z)) continue;
       const d = dist(n.x, n.z, x, z) - n.radius;
       if (d < bestD && d < maxDist) {
         bestD = d;
