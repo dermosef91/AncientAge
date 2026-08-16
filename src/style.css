@@ -2095,11 +2095,12 @@ button {
    * it 90px wide and 233px tall — a column of single words.
    */
   .objectives {
-    max-height: 30vh;
-    overflow: hidden;
+    max-height: 124px;
+    overflow-y: auto;
+    scrollbar-width: none;
   }
   .toasts {
-    top: calc(194px + var(--safe-t));
+    top: calc(196px + var(--safe-t));
     max-width: 84vw;
   }
   .coach {
@@ -2140,7 +2141,8 @@ button {
   .objectives {
     top: calc(52px + var(--safe-t));
     max-height: 38vh;
-    overflow: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
   }
   .selection {
     left: calc(112px + var(--safe-l));

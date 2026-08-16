@@ -7,6 +7,8 @@ import {
   UNITS,
   buildingCost,
   canAfford,
+  levelName,
+  levelNumeral,
   trainableAt,
 } from '../sim/data';
 import type { Game } from '../sim/game';
@@ -56,10 +58,10 @@ interface BuildCategory {
 }
 
 const BUILD_CATEGORIES: BuildCategory[] = [
-  { id: 'economy', name: 'Economy', icon: 'house', members: ['house', 'farm', 'storehouse', 'dock'] },
+  { id: 'economy', name: 'Economy', icon: 'house', members: ['tent', 'house', 'farm', 'storehouse', 'dock'] },
   { id: 'military', name: 'Military', icon: 'barracks', members: ['barracks', 'range'] },
   { id: 'defenses', name: 'Defenses', icon: 'tower', members: ['tower', 'wall'] },
-  { id: 'civic', name: 'Civic', icon: 'monument', members: ['monument', 'towncenter'] },
+  { id: 'civic', name: 'Civic', icon: 'monument', members: ['monument', 'towncenter', 'camp'] },
 ];
 
 function gridBadge(slot: number): string {
@@ -355,8 +357,8 @@ export class Hud {
       popEl.parentElement?.classList.toggle('pop-full', p.pop >= p.popCap);
     }
 
-    this.ageName.textContent = p.age >= 2 ? 'Bronze Age' : 'Tool Age';
-    const numeral = p.age >= 2 ? 'II' : 'I';
+    this.ageName.textContent = levelName(p.age);
+    const numeral = levelNumeral(p.age);
     if (this.ageNumeral.textContent !== numeral) this.ageNumeral.textContent = numeral;
     this.clock.textContent = formatClock(game.time);
 
@@ -412,7 +414,7 @@ export class Hud {
         return `<button class="${classes.join(' ')}" data-b="${t}" ${locked ? 'disabled' : ''}>
           ${icon(t)}
           <span class="n">${label(t)}</span>
-          <span class="c">${locked ? '<em class="short">Bronze Age</em>' : costHtml(cost, p.res)}</span>
+          <span class="c">${locked ? `<em class="short">${levelName(def.age ?? 1)}</em>` : costHtml(cost, p.res)}</span>
           ${gridBadge(i)}
         </button>`;
       })
@@ -437,7 +439,7 @@ export class Hud {
         <div class="bdetail-art">${icon(focus)}</div>
       </div>
       <button class="bplace" data-place="${focus}" ${flocked || fpoor ? 'disabled' : ''}>
-        ${flocked ? 'Requires the Bronze Age' : fpoor ? 'Not enough resources' : 'Place Building'}
+        ${flocked ? `Unlocks at ${levelName(fdef.age ?? 1)}` : fpoor ? 'Not enough resources' : 'Place Building'}
       </button>`;
 
     this.buildMenuEl.innerHTML = `
@@ -573,8 +575,8 @@ export class Hud {
         const tech = TECHS[t];
         const check = game.canResearch(b, t);
         const label = t === 'doctrine' ? FACTIONS[p.faction].doctrineName : tech.name;
-        actions.push(`<button class="act ${t === 'bronzeAge' ? 'primary' : ''}" data-tech="${t}" ${check.ok ? '' : 'disabled'} title="${tech.blurb}">
-          ${icon(t === 'bronzeAge' ? 'age' : 'research')}<span class="lbl">${label}</span><span class="cost">${costText(tech.cost)}</span>
+        actions.push(`<button class="act ${tech.advancesTo ? 'primary' : ''}" data-tech="${t}" ${check.ok ? '' : 'disabled'} title="${tech.blurb}">
+          ${icon(tech.advancesTo ? 'age' : 'research')}<span class="lbl">${label}</span><span class="cost">${costText(tech.cost)}</span>
         </button>`);
       }
       if ((b.def.trains?.length ?? 0) > 0) {

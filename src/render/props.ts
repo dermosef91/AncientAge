@@ -215,9 +215,40 @@ export function nodeModel(type: NodeTypeId, variant: number): BufferGeometry {
       return cached(`stone${v}`, (b) => stoneDeposit(b, v));
     case 'fish':
       return cached('fish', fishShoal);
+    case 'carcass':
+      return cached(`carcass${v & 1}`, (b) => carcass(b, v & 1));
     default:
       return cached('empty', () => {});
   }
+}
+
+/** A felled animal: a meat mound with a rib line, boar-dark or deer-tan. */
+function carcass(b: GeoBuilder, variant: number): void {
+  const hide = variant === 0 ? 0x6b4f38 : 0xb08c5e;
+  const meat = 0xa8503c;
+  b.sphere(0, 0.16, 0, 0.52, hide, 7, 0.45);
+  b.sphere(0.18, 0.14, 0.12, 0.3, meat, 6, 0.5);
+  b.boxOn(-0.28, 0.02, -0.2, 0.4, 0.1, 0.14, hide, 0.6);
+  b.boxOn(0.3, 0.02, -0.26, 0.34, 0.09, 0.12, hide, -0.4);
+  for (let i = 0; i < 3; i++) {
+    b.box(-0.05 + i * 0.14, 0.34, 0.02, 0.04, 0.14, 0.3, 0xe4d8c4, 0, 0, 0.3);
+  }
+}
+
+/** A banded treasure chest, slightly ajar with a glint of gold. */
+export function chestModel(): BufferGeometry {
+  return cached('chest', (b) => {
+    b.boxOn(0, 0, 0, 0.9, 0.5, 0.62, C.wood);
+    b.boxOn(0, 0.02, 0, 0.94, 0.12, 0.66, C.woodDark);
+    // Lid, propped open a crack.
+    b.box(0, 0.62, -0.06, 0.94, 0.18, 0.66, C.woodDark, 0, -0.28, 0);
+    // Iron bands and the hasp.
+    b.boxOn(-0.28, 0.0, 0, 0.08, 0.56, 0.68, 0x5a5a60);
+    b.boxOn(0.28, 0.0, 0, 0.08, 0.56, 0.68, 0x5a5a60);
+    b.boxOn(0, 0.2, 0.33, 0.14, 0.18, 0.05, 0x5a5a60);
+    // The gold inside catches the light.
+    b.boxOn(0, 0.44, 0, 0.7, 0.1, 0.4, C.gold);
+  });
 }
 
 export type DecorationKind = 'palm' | 'olive' | 'cypress' | 'rock' | 'grass' | 'reed' | 'ruin';

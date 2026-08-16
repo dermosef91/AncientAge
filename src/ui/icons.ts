@@ -29,6 +29,48 @@ export const ICONS: Record<string, string> = {
     <circle cx="16.4" cy="9" r="2.5" fill="currentColor" opacity=".72"/>
     <path d="M12.4 19c0-2.7 1.9-4.6 4-4.6s4 1.9 4 4.6z" fill="currentColor" opacity=".72"/>`),
 
+  tent: svg(`
+    <path d="M12 4 21 19H3z" fill="currentColor"/>
+    <path d="M12 4 21 19h-4.2L12 9.4 7.2 19H3z" fill="currentColor" opacity=".55"/>
+    <path d="M12 12.6 15.4 19H8.6z" fill="#00000055"/>`),
+  camp: svg(`
+    <path d="M10.2 6.2 17 18.8H3.4z" fill="currentColor"/>
+    <path d="M10.2 10.4 13.1 18.8H7.3z" fill="#00000055"/>
+    <path d="M17.6 10.8 21.4 18.8h-7.6z" fill="currentColor" opacity=".6"/>
+    <circle cx="18.6" cy="7" r="1.5" fill="#e8a13c"/>
+    <path d="M18.6 4.2c.8 1 .8 1.9 0 2.8-.8-.9-.8-1.8 0-2.8z" fill="#e86a3c"/>`),
+  wolf: svg(`
+    <path d="M5 6l3 2.6L12 8l4 .6L19 6l1 5.4-3.6 3.2L13 19h-2l-3.4-4.4L4 11.4z" fill="currentColor"/>
+    <circle cx="9.4" cy="10.6" r="1" fill="#00000088"/>
+    <circle cx="14.6" cy="10.6" r="1" fill="#00000088"/>
+    <path d="M11 14.6h2L12 16.4z" fill="#00000088"/>`),
+  boar: svg(`
+    <ellipse cx="11" cy="13" rx="7.4" ry="4.8" fill="currentColor"/>
+    <path d="M17 10.2 21 9l-1 3.4-3 .4z" fill="currentColor"/>
+    <path d="M19.6 12.6l1.8 1-2.2.7z" fill="#e9e2d2"/>
+    <circle cx="17.6" cy="11.4" r=".8" fill="#00000088"/>
+    <path d="M6 17.4h1.6v1.8H6zM13 17.4h1.6v1.8H13z" fill="currentColor"/>`),
+  deer: svg(`
+    <path d="M15 4c-.4 1.6-.2 2.8.8 3.8M17.8 4c.2 1.5-.2 2.7-1.3 3.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    <ellipse cx="11" cy="13.4" rx="6.4" ry="4" fill="currentColor"/>
+    <path d="M15.6 8.4 18 10l-1.2 2.8-2.6-.6z" fill="currentColor"/>
+    <path d="M6.4 16.6h1.4v2.6H6.4zM12.6 16.6H14v2.6h-1.4z" fill="currentColor"/>`),
+  bandit: svg(`
+    <circle cx="12" cy="8.4" r="3.4" fill="currentColor"/>
+    <path d="M8.6 8h6.8v1.6H8.6z" fill="#00000088"/>
+    <path d="M5.4 20c0-3.6 2.9-6.2 6.6-6.2s6.6 2.6 6.6 6.2z" fill="currentColor"/>
+    <path d="M17 5.2l3.4 3.4M20.4 5.2 17 8.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`),
+  banditArcher: svg(`
+    <circle cx="10" cy="8.4" r="3.2" fill="currentColor"/>
+    <path d="M7 8h6v1.5H7z" fill="#00000088"/>
+    <path d="M4 20c0-3.4 2.7-5.8 6-5.8s6 2.4 6 5.8z" fill="currentColor"/>
+    <path d="M17.5 5.5c2.6 2.6 2.6 6.4 0 9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M17.5 5.5v9" stroke="currentColor" stroke-width="1.2"/>`),
+  wanderer: svg(`
+    <circle cx="11" cy="7.6" r="3" fill="currentColor"/>
+    <path d="M5.6 19.6c0-3.2 2.4-5.5 5.4-5.5s5.4 2.3 5.4 5.5z" fill="currentColor"/>
+    <path d="M17.6 5v12.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M17.6 5l3.2 2-3.2 2z" fill="currentColor"/>`),
   towncenter: svg(`
     <path d="M3 11 12 4.5 21 11v1.6h-2V19H5v-6.4H3z" fill="currentColor"/>
     <path d="M10 13.4h4V19h-4z" fill="#00000055"/>

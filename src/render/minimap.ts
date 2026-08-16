@@ -1,21 +1,30 @@
-import { GRID_SIZE, T_DEEP, T_DRY, T_GRASS, T_ROCK, T_SAND, T_SHALLOW, TILE, WORLD_HALF } from '../sim/grid';
+import { GRID_SIZE, TILE, WORLD_HALF } from '../sim/grid';
 import type { Game } from '../sim/game';
 import { TEAM_COLORS } from './scene';
 
-const TERRAIN_HEX: Record<number, string> = {
-  [T_DEEP]: '#1d6d92',
-  [T_SHALLOW]: '#3f9fa8',
-  [T_SAND]: '#dcc596',
-  [T_GRASS]: '#8fa860',
-  [T_DRY]: '#bcb474',
-  [T_ROCK]: '#8f887c',
-};
+/** Terrain colours per region biome (egypt / greece / rome), RGB triples. */
+const BIOME_TERRAIN_RGB: [number, number, number][][] = [
+  // egypt — bleached desert
+  [
+    [29, 109, 146], [63, 159, 168], [230, 207, 156], [169, 168, 98], [216, 192, 132], [194, 171, 139],
+  ],
+  // greece — warm mediterranean
+  [
+    [29, 109, 146], [63, 159, 168], [220, 197, 150], [143, 168, 96], [188, 180, 116], [143, 136, 124],
+  ],
+  // rome — green lowland
+  [
+    [29, 109, 146], [63, 159, 168], [214, 201, 162], [118, 145, 74], [168, 172, 102], [156, 150, 137],
+  ],
+];
 
-/** Compact 2D minimap: static terrain layer + live entity overlay. */
+/** Compact 2D minimap: static terrain layer + fog overlay + live entities. */
 export class Minimap {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private base: HTMLCanvasElement;
+  private fog: HTMLCanvasElement;
+  private fogFrame = 0;
   private size = 0;
   private game: Game | null = null;
   private dpr = 1;
@@ -26,11 +35,14 @@ export class Minimap {
     if (!ctx) throw new Error('minimap: 2D context unavailable');
     this.ctx = ctx;
     this.base = document.createElement('canvas');
+    this.fog = document.createElement('canvas');
   }
 
   setGame(game: Game): void {
     this.game = game;
     this.renderBase();
+    this.fogFrame = 0;
+    this.renderFog();
   }
 
   resize(): void {
@@ -54,13 +66,12 @@ export class Minimap {
     const img = bctx.createImageData(n, n);
     for (let gz = 0; gz < n; gz++) {
       for (let gx = 0; gx < n; gx++) {
-        const t = game.grid.terrain[game.grid.idx(gx, gz)];
-        const hex = TERRAIN_HEX[t] ?? '#dcc596';
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
+        const idx = game.grid.idx(gx, gz);
+        const t = game.grid.terrain[idx];
+        const bio = game.biomes ? game.biomes[idx] : 1;
+        const [r, g, b] = BIOME_TERRAIN_RGB[bio]?.[t] ?? [220, 197, 150];
         // Fake relief with the height field.
-        const h = game.grid.height[game.grid.idx(gx, gz)];
+        const h = game.grid.height[idx];
         const hn = game.grid.height[game.grid.idx(gx, Math.max(0, gz - 1))];
         const shade = 1 + Math.max(-0.25, Math.min(0.25, (h - hn) * 0.35));
         const i = (gz * n + gx) * 4;
@@ -71,6 +82,25 @@ export class Minimap {
       }
     }
     bctx.putImageData(img, 0, 0);
+  }
+
+  private renderFog(): void {
+    const game = this.game;
+    if (!game) return;
+    const n = GRID_SIZE;
+    this.fog.width = n;
+    this.fog.height = n;
+    const fctx = this.fog.getContext('2d');
+    if (!fctx) return;
+    const img = fctx.createImageData(n, n);
+    for (let i = 0; i < n * n; i++) {
+      const o = i * 4;
+      img.data[o] = 6;
+      img.data[o + 1] = 9;
+      img.data[o + 2] = 14;
+      img.data[o + 3] = game.explored[i] ? 0 : 235;
+    }
+    fctx.putImageData(img, 0, 0);
   }
 
   private worldToMap(x: number, z: number): [number, number] {
@@ -96,39 +126,54 @@ export class Minimap {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.base, 0, 0, s, s);
 
-    // Resource nodes.
+    // Resource nodes show on explored ground only.
     for (const n of game.nodes) {
       if (n.depleted || n.type === 'farm') continue;
+      if (!game.isExploredAt(n.x, n.z)) continue;
       const [x, y] = this.worldToMap(n.x, n.z);
       ctx.fillStyle =
         n.resource === 'wood' ? '#4a7a3a' : n.resource === 'gold' ? '#e6b422' : n.resource === 'stone' ? '#b9b3a6' : '#c8503f';
       ctx.fillRect(x - 0.7, y - 0.7, 1.6, 1.6);
     }
 
-    // Buildings.
+    // Treasures the player has laid eyes on and not yet claimed.
+    for (const t of game.treasures) {
+      if (t.taken || !t.spotted) continue;
+      const [x, y] = this.worldToMap(t.x, t.z);
+      ctx.fillStyle = '#ffd75e';
+      ctx.fillRect(x - 1.2, y - 1.2, 2.4, 2.4);
+    }
+
+    // Buildings: yours always, others once discovered.
     for (const b of game.buildings) {
       if (b.dead) continue;
+      if (b.owner !== 0 && !game.isEntityVisible(b)) continue;
       const [x, y] = this.worldToMap(b.x, b.z);
       const w = Math.max(3, (b.size * TILE * s) / (GRID_SIZE * TILE));
       ctx.fillStyle = b.owner === 0 ? '#3fb8e8' : '#e8563f';
       ctx.globalAlpha = b.complete ? 1 : 0.55;
       ctx.fillRect(x - w / 2, y - w / 2, w, w);
       ctx.globalAlpha = 1;
-      if (b.type === 'towncenter') {
+      if (b.def.main) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.strokeRect(x - w / 2 - 1, y - w / 2 - 1, w + 2, w + 2);
       }
     }
 
-    // Units.
+    // Units: yours always; others only while watched. The wilds show pale.
     for (const u of game.units) {
       if (u.state === 'dead') continue;
+      if (u.owner !== 0 && !game.isVisibleAt(u.x, u.z)) continue;
       const [x, y] = this.worldToMap(u.x, u.z);
-      ctx.fillStyle = u.owner === 0 ? '#7fe0ff' : '#ff8a72';
+      ctx.fillStyle = u.owner === 0 ? '#7fe0ff' : u.owner === 1 ? '#ff8a72' : '#d9c8a2';
       const r = u.type === 'villager' ? 1.1 : 1.6;
       ctx.fillRect(x - r / 2, y - r / 2, r, r);
     }
+
+    // Fog overlay, refreshed a couple of times a second.
+    if (++this.fogFrame % 30 === 0) this.renderFog();
+    ctx.drawImage(this.fog, 0, 0, s, s);
 
     // Camera viewport indicator.
     const [cx, cy] = this.worldToMap(cameraTarget.x, cameraTarget.z);

@@ -5,7 +5,7 @@ import { Controls, type HotkeyMods, type PointerIntent } from './input/controls'
 import { Minimap } from './render/minimap';
 import { SceneRenderer } from './render/scene';
 import { SkirmishAI } from './sim/ai';
-import { BUILDINGS, FACTIONS, TICK_DT, UNITS, buildingCost, canAfford } from './sim/data';
+import { BUILDINGS, FACTIONS, LEVEL_TECHS, TECHS, TICK_DT, UNITS, buildingCost, canAfford, levelName, levelNumeral } from './sim/data';
 import { Game } from './sim/game';
 import { TILE, WORLD_HALF } from './sim/grid';
 import type {
@@ -379,8 +379,8 @@ class GameController {
           break;
         case 'building-destroyed':
           audio.play('destroy');
-          if (e.building.owner === 0 && e.building.type === 'towncenter') {
-            this.hud.toast('Your town centre has fallen!', 'bad', 3000);
+          if (e.building.owner === 0 && e.building.def.main) {
+            this.hud.toast('A settlement heart has fallen!', 'bad', 3000);
           }
           break;
         case 'damage':
@@ -397,20 +397,27 @@ class GameController {
           break;
         case 'research-complete':
           if (e.player === 0) {
-            audio.play(e.tech === 'bronzeAge' ? 'ageup' : 'research');
+            const adv = TECHS[e.tech].advancesTo;
+            audio.play(adv ? 'ageup' : 'research');
             const name =
               e.tech === 'doctrine'
                 ? FACTIONS[this.playerFaction].doctrineName
-                : e.tech === 'bronzeAge'
-                  ? 'Bronze Age reached'
-                  : `${e.tech} researched`;
-            this.hud.toast(name, 'good', 2600);
+                : adv
+                  ? `Your settlement is now a ${levelName(adv)}!`
+                  : `${TECHS[e.tech].name} researched`;
+            this.hud.toast(name, 'good', adv ? 3600 : 2600);
           }
           break;
         case 'under-attack':
           audio.play('warning');
           this.hud.toast('Your settlement is under attack!', 'bad', 2600);
           this.hud.flashHurt();
+          break;
+        case 'discovery':
+          if (e.player === 0) {
+            audio.play(e.flavor === 'danger' ? 'warning' : e.flavor === 'friend' ? 'ageup' : 'deposit');
+            this.hud.toast(e.text, e.flavor === 'danger' ? 'bad' : 'good', 3200);
+          }
           break;
         case 'game-over':
           this.endMatch(e.winner);
@@ -501,7 +508,7 @@ class GameController {
 
   private focusHome(): void {
     if (!this.game) return;
-    const tc = this.game.buildingsOfPlayer(0).find((b) => b.type === 'towncenter');
+    const tc = this.game.buildingsOfPlayer(0).find((b) => b.def.main);
     if (tc) this.scene.focusOn(tc.x, tc.z);
   }
 
@@ -849,7 +856,7 @@ class GameController {
 
   private selectTownCentre(): void {
     if (!this.game) return;
-    const tc = this.game.buildingsOfPlayer(0).find((b) => b.type === 'towncenter');
+    const tc = this.game.buildingsOfPlayer(0).find((b) => b.def.main);
     if (!tc) {
       audio.play('deny');
       return;
@@ -864,11 +871,11 @@ class GameController {
     const game = this.game;
     const units = this.selection.filter((e): e is Unit => e.kind === 'unit' && e.owner === 0);
     const buildings = this.selection.filter(
-      (e) => e.kind === 'building' && e.owner === 0 && e.type !== 'towncenter',
+      (e) => e.kind === 'building' && e.owner === 0 && !e.def.main,
     );
     if (units.length === 0 && buildings.length === 0) {
-      if (this.selection.some((e) => e.kind === 'building' && e.type === 'towncenter')) {
-        this.hud.toast('The town centre cannot be deleted', 'bad', 1800);
+      if (this.selection.some((e) => e.kind === 'building' && e.def.main)) {
+        this.hud.toast('A settlement heart cannot be deleted', 'bad', 1800);
       }
       audio.play('deny');
       return;
@@ -1163,22 +1170,47 @@ class GameController {
     const game = this.game;
     if (!game || !this.running) return [];
     const p = game.player(0);
-    const villagers = game.countUnits(0, (u) => u.type === 'villager');
-    const houses = game.countBuildings(0, 'house');
-    const barracks = game.countBuildings(0, 'barracks');
-    const army = game.countUnits(0, (u) => u.def.attack > 0 && u.type !== 'villager');
+    const list: Objective[] = [];
 
-    const list: Objective[] = [
-      { text: 'Train villagers', detail: `${villagers}/8`, done: villagers >= 8 },
-      { text: 'Build a House', detail: `${Math.min(houses, 2)}/2`, done: houses >= 2 },
-      { text: 'Build a Barracks', detail: `${barracks}/1`, done: barracks >= 1 },
-      { text: 'Train soldiers', detail: `${army}/6`, done: army >= 6 },
-      { text: 'Reach the Bronze Age', detail: p.age >= 2 ? '✓' : '0/1', done: p.age >= 2 },
-      { text: 'Raze the enemy town centre', done: false },
-    ];
+    // The settlement ladder is the spine of the match: surface exactly what
+    // the next level asks for.
+    const nextTech = LEVEL_TECHS[p.age - 1];
+    if (nextTech) {
+      const def = TECHS[nextTech];
+      if (def.prereqPop) {
+        list.push({
+          text: `Grow to ${def.prereqPop} settlers`,
+          detail: `${p.pop}/${def.prereqPop}`,
+          done: p.pop >= def.prereqPop,
+        });
+      }
+      for (const need of def.prereqBuildings ?? []) {
+        const have = game.countBuildings(0, need);
+        list.push({
+          text: `Build a ${BUILDINGS[need].name}`,
+          detail: `${Math.min(have, 1)}/1`,
+          done: have >= 1,
+        });
+      }
+      list.push({ text: def.name, detail: levelNumeral(def.advancesTo ?? p.age + 1), done: false });
+    }
+
+    // The wilds reward the explorer all game long.
+    const seenFrac = Math.min(1, game.exploredCount / Math.max(1, game.landTileCount));
+    list.push({
+      text: 'Explore the continent',
+      detail: `${Math.round(seenFrac * 100)}%`,
+      done: seenFrac >= 0.6,
+    });
+    const total = game.treasures.length;
+    if (total > 0) {
+      const found = game.treasures.filter((t) => t.taken).length;
+      list.push({ text: 'Find treasure in the wilds', detail: `${found}/${total}`, done: found >= total });
+    }
+    list.push({ text: 'Or raze the enemy settlement', done: false });
+
     // Show the next few steps only, so the panel stays compact.
-    const firstOpen = list.findIndex((o) => !o.done);
-    return list.slice(Math.max(0, Math.min(firstOpen, list.length - 3)), Math.max(3, firstOpen + 3));
+    return list.slice(0, 4);
   }
 
   private updateCoach(): void {
@@ -1195,15 +1227,15 @@ class GameController {
       },
       {
         text: pc
-          ? 'Press <b>H</b> for your <b>Town Center</b>, then <b>Q</b> to train a villager. More villagers means a faster economy.'
-          : 'Tap your <b>Town Center</b>, then tap <b>Villager</b> to train more workers. More villagers means a faster economy.',
+          ? 'Press <b>H</b> for your <b>Camp</b>, then <b>Q</b> to train a villager. More villagers means a faster economy.'
+          : 'Tap your <b>Camp</b>, then tap <b>Villager</b> to train more workers. More villagers means a faster economy.',
         done: () => game.countUnits(0, (u) => u.type === 'villager') >= 5,
       },
       {
         text: pc
-          ? 'Press <b>B</b> for the build menu, <b>Q</b> for a <b>House</b>, then click clear ground to raise your population limit.'
-          : 'Tap <b>Build</b> and place a <b>House</b> on clear ground to raise your population limit.',
-        done: () => game.countBuildings(0, 'house') >= 1,
+          ? 'Press <b>B</b> for the build menu and raise <b>Tents</b> — your camp becomes a <b>Hamlet</b> at 7 settlers.'
+          : 'Tap <b>Build</b> and raise <b>Tents</b> — your camp becomes a <b>Hamlet</b> at 7 settlers.',
+        done: () => game.countBuildings(0, 'tent') >= 1,
       },
       {
         text: pc
@@ -1212,12 +1244,12 @@ class GameController {
         done: () => this.coachTimer > 70,
       },
       {
-        text: 'Build a <b>Barracks</b> — the enemy will attack before long.',
-        done: () => game.countBuildings(0, 'barracks') >= 1,
+        text: 'Scout the wilds: <b>treasure</b>, <b>game to hunt</b> and <b>lost wanderers</b> are out there — and bandits guarding hoards.',
+        done: () => game.treasures.some((t) => t.taken) || this.coachTimer > 60,
       },
       {
-        text: 'Research <b>Bronze Age</b> at the Town Center to unlock towers, your monument and your elite unit.',
-        done: () => p.age >= 2,
+        text: 'Follow the <b>objectives</b>: each settlement level unlocks new buildings, and reaching the <b>Metropolis</b> wins the match outright.',
+        done: () => p.age >= 3,
       },
     ];
     while (this.coachStep < steps.length && steps[this.coachStep].done()) {

@@ -7,7 +7,12 @@
  */
 
 export const TILE = 2;
-export const GRID_SIZE = 72;
+/**
+ * 228 tiles per side is ten times the area of the original 72-tile map. The
+ * world is one continent with outlying islands now, so most of a match is
+ * played on a small explored corner of this.
+ */
+export const GRID_SIZE = 228;
 export const WORLD_HALF = (GRID_SIZE * TILE) / 2;
 
 export const T_DEEP = 0;
@@ -260,7 +265,7 @@ export class PathFinder {
     tx: number,
     tz: number,
     domain: Domain,
-    maxNodes = 2600,
+    maxNodes = 7000,
   ): number[] | null {
     const grid = this.grid;
     let sgx = grid.tileX(sx);
