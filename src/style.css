@@ -103,6 +103,20 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+  /* Both clusters are content-sized; without this the resource strip pushes
+     the age plate and its menu button clean off a phone screen. */
+  min-width: 0;
+}
+.res-strip,
+.age-cluster {
+  min-width: 0;
+}
+.res-strip {
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+.age-cluster {
+  flex: 0 0 auto;
 }
 
 .res-strip {
@@ -373,11 +387,11 @@ button {
 /* Corner button, the way the reference frames its map. */
 .mm-expand {
   position: absolute;
-  top: 11px;
-  right: 11px;
+  top: 10px;
+  right: 10px;
   z-index: 2;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 7px;
   display: grid;
   place-items: center;
@@ -385,8 +399,8 @@ button {
   border: 1px solid rgba(233, 196, 106, 0.3);
 }
 .mm-expand .ico {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   color: var(--gold);
 }
 .minimap-wrap .compass {
@@ -403,7 +417,7 @@ button {
 .selection {
   position: absolute;
   bottom: calc(8px + var(--safe-b));
-  left: calc(136px + var(--safe-l));
+  left: calc(168px + var(--safe-l));
   right: calc(150px + var(--safe-r));
   min-height: 66px;
   max-height: 132px;
@@ -924,10 +938,26 @@ button {
   }
   .btab {
     flex: 0 0 auto;
+    min-height: 42px;
+    padding: 8px 11px;
   }
   .bdetail-body p {
     display: none;
   }
+
+  /* The bottom sheet owns the screen while it is open. */
+  .building .objectives,
+  .building .selection {
+    display: none;
+  }
+  .building .toasts {
+    top: calc(64px + var(--safe-t));
+  }
+}
+
+/* The onboarding tip never competes with the build sheet, at any size. */
+.building .coach {
+  display: none;
 }
 
 /* ----------------------------------------------------------------- toasts */
@@ -1046,8 +1076,6 @@ button {
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
   background: radial-gradient(120% 120% at 50% 0%, rgba(30, 44, 60, 0.86), rgba(8, 12, 18, 0.95));
   backdrop-filter: blur(7px);
@@ -1058,6 +1086,15 @@ button {
 }
 .screen.hidden {
   display: none;
+}
+/*
+ * `margin: auto` rather than `align-items: center`. A centred flex item that
+ * outgrows its scroll container has its top pushed above the scroll origin and
+ * becomes unreachable — on a landscape phone that hid the Start button and the
+ * pause menu's Resume/Quit outright. Auto margins centre only the slack.
+ */
+.screen > * {
+  margin: auto;
 }
 
 .screen-inner {
@@ -1430,6 +1467,19 @@ button {
   flex-direction: column;
   gap: 11px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  /*
+   * Never taller than the screen: the research list gives up the room instead,
+   * so Resume / Restart / Main menu stay on screen without a scroll hunt.
+   */
+  max-height: 100%;
+  overflow: hidden;
+}
+.sheet > * {
+  flex: 0 0 auto;
+}
+.sheet .tech-list {
+  flex: 1 1 auto;
+  min-height: 56px;
 }
 .sheet h2 {
   margin: 0;
@@ -1582,17 +1632,142 @@ button {
   }
 }
 
+/*
+ * Narrow portrait phones: three faction columns leave ~100px each, which clips
+ * the civilisation's own name and breaks the traits into two-word ribbons. One
+ * column per card reads properly; the screen scrolls, and Begin Skirmish
+ * sticks to the bottom so it is never a scroll away.
+ */
+@media (max-width: 430px) and (orientation: portrait) {
+  .faction-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  /*
+   * A full-width card would need a 230px-tall scene to keep its aspect ratio,
+   * and cropping it to a letterbox slices the landmark the illustration exists
+   * to show. Set the scene beside the traits at its own ratio instead.
+   */
+  .fcard {
+    display: grid;
+    grid-template-columns: 128px 1fr;
+    grid-template-areas: 'head head' 'art perks';
+    align-items: start;
+  }
+  .fcard-head {
+    grid-area: head;
+  }
+  /*
+   * Height comes from the traits column and the scene crops at the sides, so
+   * the landmark keeps its full height instead of being sliced across.
+   * `aspect-ratio` must go, or stretching the height widens it past its column.
+   */
+  .fart {
+    grid-area: art;
+    aspect-ratio: auto;
+    align-self: stretch;
+    min-height: 84px;
+  }
+  .fart-clip {
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  /* The head already carries a crest; a second one would sit on the traits. */
+  .fcrest {
+    display: none;
+  }
+  .fperks {
+    grid-area: perks;
+    padding: 10px 12px 11px;
+    gap: 6px;
+  }
+  .title-screen .btn-row {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0 2px;
+    background: linear-gradient(180deg, rgba(10, 15, 21, 0) 0%, rgba(10, 15, 21, 0.92) 38%);
+  }
+}
+
+/*
+ * The pause sheet carries a header, three toggles, the research list and three
+ * buttons. On a small or short screen that stack is taller than the viewport,
+ * so trim the optional parts and lay the buttons out in one row.
+ */
+@media (max-width: 620px), (max-height: 560px) {
+  .sheet {
+    gap: 8px;
+    padding: 12px;
+  }
+  .sheet .end-sub {
+    display: none;
+  }
+  .sheet .opt {
+    min-height: 42px;
+    padding: 4px 10px;
+  }
+  .sheet .btn-row {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .sheet .btn-row .big-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+}
+
 /* Landscape phones: compress the title screen so it fits without scrolling. */
-@media (max-height: 430px) {
+@media (max-height: 560px) {
   .screen-inner {
     gap: 8px;
+  }
+  /*
+   * The illustrated scene is the tallest thing on a faction card and the first
+   * thing to give when the viewport is short — the crest, the name and the
+   * traits are what the choice is actually made on.
+   */
+  .fart {
+    aspect-ratio: auto;
+    height: clamp(38px, 13vh, 78px);
+  }
+  .fcrest {
+    bottom: -13px;
+    width: 30px;
+    height: 30px;
+  }
+  .fperks {
+    gap: 5px;
+    padding: 19px 9px 10px;
+  }
+  .fperk {
+    font-size: 11px;
+    line-height: 1.28;
+  }
+  .fperk-ico {
+    width: 18px;
+    height: 18px;
+  }
+  .hint-strip {
+    display: none;
+  }
+}
+
+@media (max-height: 430px) {
+  .screen-inner {
+    gap: 6px;
   }
   .title-block h1 {
     font-size: clamp(24px, 4.4vw, 34px);
   }
+  /* The tagline is the one line this screen can do without. */
   .title-block p {
-    font-size: 12px;
-    margin-top: 3px;
+    display: none;
+  }
+  .fart {
+    height: clamp(30px, 10vh, 52px);
   }
   .title-block .kicker {
     font-size: 10px;
@@ -1778,4 +1953,212 @@ button {
   border: 1px solid var(--stroke);
   color: var(--text);
   font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ phones */
+/*
+ * The HUD is laid out for a desktop first; on a phone every cluster has to
+ * shrink or move so that nothing runs off the edge and nothing lands on top of
+ * anything else. Measured against 360x640, 390x844 and landscape 740x360.
+ */
+@media (max-width: 620px) {
+  :root {
+    --tap: 44px;
+  }
+
+  /*
+   * Five counters will not fit on one phone-width line beside the age plate --
+   * they were being sliced mid-number -- so the strip wraps onto two rows and
+   * every value stays legible. Three chips per row is the worst case, which is
+   * why the topbar below is sized for exactly two.
+   */
+  .res-strip {
+    gap: 0;
+    padding: 5px 8px;
+    border-radius: 13px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 2px;
+    overflow: hidden;
+  }
+  .res {
+    gap: 4px;
+    padding: 1px 5px;
+    font-size: 13px;
+  }
+  .res .ico {
+    width: 16px;
+    height: 16px;
+  }
+  .res .val {
+    min-width: 0;
+  }
+  .res-sep {
+    margin: 2px 5px;
+  }
+
+  /* Age plate: keep the medallion and the menu, drop the wordmark. */
+  .age-badge {
+    gap: 7px;
+    padding: 4px 9px 4px 5px;
+    border-radius: 13px;
+  }
+  .age-medal {
+    width: 30px;
+    height: 30px;
+  }
+  .age-medal b {
+    font-size: 12px;
+  }
+  .age-badge .age-name {
+    display: none;
+  }
+  .age-badge .clock {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .menu-btn {
+    border-radius: 13px;
+  }
+
+  /* Objectives sit under the two-row resource strip and take less room. */
+  .objectives {
+    top: calc(64px + var(--safe-t));
+    width: min(210px, 54vw);
+    padding: 7px 10px 8px;
+    font-size: 11.5px;
+    border-radius: 12px;
+  }
+  .objectives h4 {
+    font-size: 10px;
+    letter-spacing: 1.4px;
+  }
+  .obj-rule {
+    margin: 3px 0 4px;
+  }
+  .obj-item {
+    padding: 2px 0;
+  }
+
+  /* Minimap: smaller, and its corner button becomes a real tap target. */
+  .minimap-wrap {
+    width: 108px;
+    height: 108px;
+    border-radius: 12px;
+    padding: 5px;
+  }
+  .mm-expand {
+    top: 8px;
+    right: 8px;
+    width: 36px;
+    height: 36px;
+  }
+  .mm-expand .ico {
+    width: 18px;
+    height: 18px;
+  }
+  .minimap-wrap .compass {
+    display: none;
+  }
+
+  /* Control groups ride above the shorter minimap. */
+  .groups {
+    bottom: calc(122px + var(--safe-b));
+    max-width: 108px;
+  }
+
+  /*
+   * Wedged between the minimap and the build button, the selection panel had
+   * ~24px left for text and clipped the unit's own name. Give it its own row
+   * above the bottom controls instead, stopping short of the right rail.
+   */
+  .selection {
+    left: calc(8px + var(--safe-l));
+    right: calc(60px + var(--safe-r));
+    bottom: calc(128px + var(--safe-b));
+    max-height: 118px;
+  }
+
+  .right-rail {
+    gap: 6px;
+  }
+  .icon-btn .ico {
+    width: 21px;
+    height: 21px;
+  }
+
+  /*
+   * Three floating cards want the same corner on a phone. Give each its own
+   * band: objectives at the top left (height-capped so it cannot creep down),
+   * toasts in the strip below it, and the coach as a full-width footer sitting
+   * above the bottom controls. Right-anchoring the coach on a 390px screen left
+   * it 90px wide and 233px tall — a column of single words.
+   */
+  .objectives {
+    max-height: 30vh;
+    overflow: hidden;
+  }
+  .toasts {
+    top: calc(194px + var(--safe-t));
+    max-width: 84vw;
+  }
+  .coach {
+    top: auto;
+    bottom: calc(252px + var(--safe-b)); /* above the selection row */
+    left: calc(8px + var(--safe-l));
+    right: calc(60px + var(--safe-r)); /* clears the right rail's column */
+    max-width: none;
+  }
+
+  /* Button captions are read at arm's length on a phone. */
+  .act .lbl,
+  .act .cost {
+    font-size: 10.5px;
+  }
+}
+
+/*
+ * Landscape phones are wide but very short: the right rail runs from the
+ * middle outwards and collides with the age plate, and there is no vertical
+ * room for a tall minimap.
+ */
+@media (max-height: 460px) and (orientation: landscape) {
+  .right-rail {
+    top: auto;
+    bottom: calc(8px + var(--safe-b));
+    transform: none;
+    flex-direction: row;
+  }
+  .minimap-wrap {
+    width: 96px;
+    height: 96px;
+  }
+  .groups {
+    bottom: calc(110px + var(--safe-b));
+    max-width: 96px;
+  }
+  .objectives {
+    top: calc(52px + var(--safe-t));
+    max-height: 38vh;
+    overflow: hidden;
+  }
+  .selection {
+    left: calc(112px + var(--safe-l));
+  }
+  /* Keep the rail clear of the build button in the same corner. */
+  .build-fab {
+    bottom: calc(62px + var(--safe-b));
+  }
+  .selection {
+    right: calc(268px + var(--safe-r));
+    /* Tall enough for a full 44px action row; at 104px the buttons were sliced. */
+    max-height: 122px;
+  }
+  .toasts {
+    top: calc(52px + var(--safe-t));
+  }
+  .act .lbl,
+  .act .cost {
+    font-size: 10.5px;
+  }
 }

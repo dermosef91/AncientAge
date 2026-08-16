@@ -607,6 +607,17 @@ class GameController {
 
     // Own construction site -> send the selected villagers to help.
     if (hit.entity && hit.entity.owner === 0) {
+      // A finished farm is a building standing on its own harvest point, and
+      // the building is what the pick returns — so look past it to the node.
+      if (hit.entity.kind === 'building' && hit.entity.complete && hit.entity.type === 'farm') {
+        const gatherers = own.filter((u) => u.def.canGather);
+        const node = game.nodeOfBuilding(hit.entity.id);
+        if (gatherers.length > 0 && node && game.commandGather(gatherers, node.id)) {
+          this.scene.addOrderPulse(node.x, node.z, 0xa8dc7a);
+          audio.play('command');
+          return;
+        }
+      }
       if (hit.entity.kind === 'building' && !hit.entity.complete) {
         const builders = own.filter((u) => u.def.canBuild);
         if (builders.length) {
