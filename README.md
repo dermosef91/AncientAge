@@ -61,6 +61,7 @@ whichever you reach for.
 | `H` | select your town centre |
 | `B` | build menu |
 | `.` / `,` | next / previous idle villager |
+| `F` | full screen |
 | `Delete` | delete the selected units |
 | `F1` or `?` | the full controls reference |
 
@@ -69,9 +70,10 @@ and with the build menu open `Q` picks the first building on the open tab while 
 switches to Military. The rows step around `WASD`, which belongs to the camera. Every
 button carries its letter, so the key under a button is always the one that presses it.
 
-The right-hand rail selects your whole army, cycles idle villagers, recentres on the
-town centre and mutes sound. Left-click or drag the minimap to move the camera;
-right-click it to send the selection there.
+The right-hand rail recentres on the town centre, cycles idle villagers, selects your
+whole army, mutes sound and goes full screen — full screen is also on `F` and in the
+pause menu. Left-click or drag the minimap to move the camera; right-click it to send
+the selection there.
 
 `?seed=12345` replays a specific map, `?enemy=rome` forces the opponent's
 civilisation, and `?fps=1` shows a frame counter.

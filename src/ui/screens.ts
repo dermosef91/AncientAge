@@ -1,6 +1,7 @@
 import { FACTIONS, TECHS } from '../sim/data';
 import type { FactionId, Player, TechId } from '../sim/types';
 import { FACTION_PLURAL, factionCrest, factionScene } from './factionArt';
+import { fullscreenSupported, isFullscreen } from './fullscreen';
 import { icon } from './icons';
 
 const FACTION_ORDER: FactionId[] = ['egypt', 'greece', 'rome'];
@@ -24,6 +25,7 @@ export interface ScreenCallbacks {
   onResume: () => void;
   onToggleSound: () => boolean;
   onToggleShadows: () => boolean;
+  onToggleFullscreen: () => void;
   onQuit: () => void;
 }
 
@@ -125,6 +127,11 @@ export class Screens {
     });
   }
 
+  /** Keeps the pause sheet's toggle in step, however fullscreen changed. */
+  setFullscreen(active: boolean): void {
+    this.pauseEl.querySelector('[data-act="fullscreen"]')?.classList.toggle('on', active);
+  }
+
   get selectedFaction(): FactionId {
     return this.selected;
   }
@@ -196,6 +203,11 @@ export class Screens {
       <p class="end-sub" style="text-align:left;font-size:12.5px">${f.bonusText}</p>
       <div class="opt">Sound<button class="toggle ${state.sound ? 'on' : ''}" data-act="sound"></button></div>
       <div class="opt">Shadows<button class="toggle ${state.shadows ? 'on' : ''}" data-act="shadows"></button></div>
+      ${
+        fullscreenSupported
+          ? `<div class="opt">Full screen<button class="toggle ${isFullscreen() ? 'on' : ''}" data-act="fullscreen"></button></div>`
+          : ''
+      }
       <div class="tech-list">${techs}</div>
       <div class="btn-row" style="margin-top:2px">
         <button class="big-btn" data-act="resume">Resume</button>
@@ -213,6 +225,11 @@ export class Screens {
     shadows.addEventListener('click', () => {
       const on = this.cb.onToggleShadows();
       shadows.classList.toggle('on', on);
+    });
+    this.pauseEl.querySelector<HTMLElement>('[data-act="fullscreen"]')?.addEventListener('click', () => {
+      // The class follows the fullscreenchange event, not this click, since the
+      // browser may refuse the request.
+      this.cb.onToggleFullscreen();
     });
     this.pauseEl.querySelector('[data-act="resume"]')?.addEventListener('click', () => {
       this.hideAll();

@@ -144,6 +144,10 @@ export const ICONS: Record<string, string> = {
   flag: svg(`
     <path d="M5.6 3h1.8v18H5.6z" fill="currentColor"/>
     <path d="M7.8 3.8h11l-2.4 3.6 2.4 3.6h-11z" fill="currentColor" opacity=".78"/>`),
+  fullscreen: svg(`
+    <path d="M4 9V5.6c0-.9.7-1.6 1.6-1.6H9M15 4h3.4c.9 0 1.6.7 1.6 1.6V9M20 15v3.4c0 .9-.7 1.6-1.6 1.6H15M9 20H5.6c-.9 0-1.6-.7-1.6-1.6V15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>`),
+  fullscreenExit: svg(`
+    <path d="M9 4v3.4c0 .9-.7 1.6-1.6 1.6H4M20 9h-3.4c-.9 0-1.6-.7-1.6-1.6V4M15 20v-3.4c0-.9.7-1.6 1.6-1.6H20M4 15h3.4c.9 0 1.6.7 1.6 1.6V20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>`),
   rally: svg(`
     <circle cx="12" cy="12" r="3" fill="currentColor"/>
     <circle cx="12" cy="12" r="7.4" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".65"/>

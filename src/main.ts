@@ -17,6 +17,7 @@ import type {
   Unit,
   UnitTypeId,
 } from './sim/types';
+import { fullscreenSupported, isFullscreen, onFullscreenChange, toggleFullscreen } from './ui/fullscreen';
 import { Hud, type Objective } from './ui/hud';
 import { Screens } from './ui/screens';
 
@@ -103,6 +104,7 @@ class GameController {
       onMinimapCommand: (px, py) => this.minimapCommand(px, py),
       onCoachDismiss: () => this.dismissCoach(),
       onHelp: () => this.setHelp(!this.helpOpen),
+      onFullscreen: () => this.toggleFullscreen(),
     });
 
     this.screens = new Screens(uiRoot, {
@@ -124,6 +126,7 @@ class GameController {
         this.scene.setQuality({ shadows: on });
         return on;
       },
+      onToggleFullscreen: () => this.toggleFullscreen(),
       onQuit: () => {
         this.running = false;
         this.paused = false;
@@ -149,6 +152,15 @@ class GameController {
       },
       uiRoot,
     );
+
+    onFullscreenChange((active) => {
+      this.hud.setFullscreen(active);
+      this.screens.setFullscreen(active);
+      // Some browsers report the new viewport a frame late.
+      this.resize();
+      requestAnimationFrame(() => this.resize());
+    });
+    this.hud.setFullscreen(isFullscreen());
 
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 220));
@@ -750,6 +762,9 @@ class GameController {
       case 'b':
         this.toggleBuildMenu();
         return true;
+      case 'f':
+        this.toggleFullscreen();
+        return true;
       case 'delete':
         this.deleteSelection();
         return true;
@@ -853,6 +868,19 @@ class GameController {
     }
     this.setSelection([], true);
     this.hud.toast(`Deleted ${units.length + buildings.length}`, 'info', 1400);
+  }
+
+  /**
+   * Fullscreen has to be asked for from a user gesture, which both the rail
+   * button and the F key are, so this can be called from either.
+   */
+  private toggleFullscreen(): void {
+    if (!fullscreenSupported) {
+      this.hud.toast('Full screen is not available in this browser', 'info', 2200);
+      return;
+    }
+    audio.unlock();
+    void toggleFullscreen();
   }
 
   private setHelp(open: boolean): void {
