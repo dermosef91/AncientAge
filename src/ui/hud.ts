@@ -11,6 +11,7 @@ import {
 } from '../sim/data';
 import type { Game } from '../sim/game';
 import type { Building, BuildingTypeId, Cost, Entity, ResourceKind, TechId, Unit, UnitTypeId } from '../sim/types';
+import { fullscreenSupported } from './fullscreen';
 import { icon } from './icons';
 
 export interface HudCallbacks {
@@ -32,6 +33,7 @@ export interface HudCallbacks {
   onMinimapCommand: (px: number, py: number) => void;
   onCoachDismiss: () => void;
   onHelp: () => void;
+  onFullscreen: () => void;
 }
 
 /**
@@ -126,6 +128,7 @@ export class Hud {
   private buildFocus: BuildingTypeId | null = null;
   private helpEl!: HTMLElement;
   private groupsEl!: HTMLElement;
+  private fullscreenBtn!: HTMLButtonElement;
 
   constructor(root: HTMLElement, private cb: HudCallbacks) {
     this.root = root;
@@ -152,6 +155,9 @@ export class Hud {
     this.minimapCanvas = root.querySelector('canvas.minimap')!;
     this.helpEl = root.querySelector('.help')!;
     this.groupsEl = root.querySelector('.groups')!;
+    this.fullscreenBtn = root.querySelector('[data-act="fullscreen"]')!;
+    // A browser that cannot go fullscreen should not offer the button.
+    if (!fullscreenSupported) this.fullscreenBtn.remove();
 
     this.wire();
   }
@@ -200,6 +206,7 @@ export class Hud {
         <button class="icon-btn" data-act="idle" aria-label="Select idle villager">${icon('idle')}<span class="badge" style="display:none">0</span></button>
         <button class="icon-btn" data-act="army" aria-label="Select army">${icon('army')}</button>
         <button class="icon-btn" data-act="mute" aria-label="Toggle sound">${icon('sound')}</button>
+        <button class="icon-btn" data-act="fullscreen" aria-label="Toggle full screen" title="Full screen (F)">${icon('fullscreen')}<span class="hk">F</span></button>
         <button class="icon-btn desktop-only" data-act="help" aria-label="Controls" title="Controls (F1)">?</button>
       </div>
 
@@ -243,6 +250,7 @@ export class Hud {
         ['Z X C V', "The build menu's category tabs"],
         ['Ctrl + 1…0', 'Assign a control group'],
         ['1…0', 'Select it · press twice to jump there'],
+        ['F', 'Full screen'],
         ['Delete', 'Delete the selected units'],
         ['Esc', 'Cancel · open the menu'],
       ],
@@ -285,6 +293,7 @@ export class Hud {
     on('[data-act="build"]', () => this.cb.onBuildToggle());
     on('[data-act="coach-ok"]', () => this.cb.onCoachDismiss());
     on('[data-act="help"]', () => this.cb.onHelp());
+    on('[data-act="fullscreen"]', () => this.cb.onFullscreen());
     on('[data-act="help-close"]', () => this.cb.onHelp());
 
     const mm = this.root.querySelector<HTMLElement>('.minimap-wrap')!;
@@ -808,6 +817,14 @@ export class Hud {
   flashHurt(): void {
     this.vignette.classList.add('on');
     setTimeout(() => this.vignette.classList.remove('on'), 220);
+  }
+
+  /** Swaps the rail icon between enter and exit. */
+  setFullscreen(active: boolean): void {
+    if (!this.fullscreenBtn.isConnected) return;
+    this.fullscreenBtn.innerHTML = icon(active ? 'fullscreenExit' : 'fullscreen') + '<span class="hk">F</span>';
+    this.fullscreenBtn.classList.toggle('on', active);
+    this.fullscreenBtn.setAttribute('aria-label', active ? 'Leave full screen' : 'Toggle full screen');
   }
 
   setHelpVisible(open: boolean): void {
