@@ -1,0 +1,2164 @@
+:root {
+  --panel: rgba(20, 27, 37, 0.84);
+  --panel-solid: #182230;
+  --panel-light: rgba(38, 50, 66, 0.9);
+  --stroke: rgba(255, 255, 255, 0.11);
+  --stroke-strong: rgba(255, 255, 255, 0.22);
+  --text: #f3eee2;
+  --text-dim: #a9b3c1;
+  --gold: #e9c46a;
+  --gold-deep: #c99b3f;
+  --good: #6de08a;
+  --bad: #ef6a55;
+  --info: #6ec7ee;
+  --food: #e3c05a;
+  --wood: #c08a52;
+  --gold-res: #efc540;
+  --stone: #b9b3a6;
+  --radius: 14px;
+  --tap: 46px;
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: #0e141c;
+  color: var(--text);
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+canvas#scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.ui button,
+.ui .clickable {
+  pointer-events: auto;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.ico {
+  display: inline-flex;
+  width: 1.15em;
+  height: 1.15em;
+  flex: 0 0 auto;
+}
+.ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------------------------------------------------------------- top bar */
+.topbar {
+  position: absolute;
+  top: calc(6px + var(--safe-t));
+  left: calc(8px + var(--safe-l));
+  right: calc(8px + var(--safe-r));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  /* Both clusters are content-sized; without this the resource strip pushes
+     the age plate and its menu button clean off a phone screen. */
+  min-width: 0;
+}
+.res-strip,
+.age-cluster {
+  min-width: 0;
+}
+.res-strip {
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+.age-cluster {
+  flex: 0 0 auto;
+}
+
+.res-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.22);
+  border-radius: 16px;
+  padding: 7px 14px;
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+/* Divider before the population count, as in the reference strip. */
+.res-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 9px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.res {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  border-radius: 9px;
+  transition: background 0.25s;
+}
+.res .ico {
+  width: 21px;
+  height: 21px;
+}
+.res.flash {
+  background: rgba(233, 196, 106, 0.22);
+}
+.res.pop-full span {
+  color: var(--bad);
+}
+.res .val {
+  min-width: 1.9em;
+}
+
+/* age medallion + menu */
+.age-cluster {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.age-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.22);
+  border-radius: 16px;
+  padding: 6px 16px 6px 7px;
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.age-medal {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #3a4a5e, #141c26);
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 0 8px rgba(233, 196, 106, 0.3);
+}
+.age-medal b {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+}
+.age-badge .age-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.age-badge .age-name {
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.age-badge .clock {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-btn {
+  position: relative;
+  width: var(--tap);
+  height: var(--tap);
+  min-width: var(--tap);
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.94), rgba(13, 19, 27, 0.96));
+  border: 1.5px solid rgba(233, 196, 106, 0.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.42);
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+}
+.icon-btn .ico {
+  width: 23px;
+  height: 23px;
+  color: var(--text);
+}
+.icon-btn:active {
+  transform: scale(0.93);
+  border-color: var(--gold);
+}
+.icon-btn.on {
+  border-color: var(--gold);
+  background: rgba(233, 196, 106, 0.2);
+}
+/* The menu sits square-ish against the age plate. */
+.menu-btn {
+  border-radius: 16px;
+  height: auto;
+  align-self: stretch;
+}
+.icon-btn .badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: #20160a;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: 1.5px solid rgba(13, 19, 27, 0.85);
+}
+
+/* ------------------------------------------------------------- objectives */
+.objectives {
+  position: absolute;
+  top: calc(66px + var(--safe-t));
+  left: calc(8px + var(--safe-l));
+  width: min(268px, 42vw);
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.9), rgba(13, 19, 27, 0.92));
+  border: 1px solid rgba(233, 196, 106, 0.2);
+  border-radius: 14px;
+  padding: 10px 14px 11px;
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  font-size: 13px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.3s;
+}
+.objectives.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.objectives h4 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 800;
+}
+/* Diamond rule under the heading. */
+.obj-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 6px;
+}
+.obj-rule i {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.5), transparent);
+}
+.obj-rule i:first-child {
+  width: 14px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.5));
+}
+.obj-rule i:last-child {
+  flex: 1 1 auto;
+}
+.obj-rule b {
+  color: var(--gold);
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.obj-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  color: var(--text);
+  line-height: 1.35;
+}
+.obj-item .bullet {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transform: translateY(-2px);
+}
+.obj-item span:not(.dot) {
+  flex: 1 1 auto;
+}
+.obj-item .dot {
+  color: var(--info);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.obj-item.done {
+  color: var(--text-dim);
+}
+.obj-item.done span:not(.dot) {
+  text-decoration: line-through;
+}
+.obj-item.done .bullet {
+  background: var(--good);
+}
+.obj-item.done .dot {
+  color: var(--good);
+}
+
+/* ---------------------------------------------------------------- minimap */
+.minimap-wrap {
+  position: absolute;
+  left: calc(8px + var(--safe-l));
+  bottom: calc(8px + var(--safe-b));
+  width: 152px;
+  height: 152px;
+  border-radius: 14px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(24, 33, 45, 0.92), rgba(13, 19, 27, 0.94));
+  border: 1px solid rgba(233, 196, 106, 0.24);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  touch-action: none;
+}
+.minimap-wrap canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 9px;
+  background: #17222c;
+}
+/* Corner button, the way the reference frames its map. */
+.mm-expand {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(11, 16, 23, 0.72);
+  border: 1px solid rgba(233, 196, 106, 0.3);
+}
+.mm-expand .ico {
+  width: 17px;
+  height: 17px;
+  color: var(--gold);
+}
+.minimap-wrap .compass {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* -------------------------------------------------------- selection panel */
+.selection {
+  position: absolute;
+  bottom: calc(8px + var(--safe-b));
+  left: calc(168px + var(--safe-l));
+  right: calc(150px + var(--safe-r));
+  min-height: 66px;
+  max-height: 132px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.42);
+  padding: 8px 10px;
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  pointer-events: auto;
+  overflow: hidden;
+}
+.selection.empty {
+  display: none;
+}
+
+.sel-portrait {
+  width: 62px;
+  flex: 0 0 62px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, rgba(233, 196, 106, 0.2), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--stroke);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+}
+.sel-portrait .ico {
+  width: 30px;
+  height: 30px;
+  color: var(--gold);
+}
+.sel-portrait .cnt {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.sel-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+.sel-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sel-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sel-title .sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.sel-hp {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.sel-hp i {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  border-radius: 4px;
+  transition: width 0.15s;
+}
+.sel-hp.enemy i {
+  background: var(--bad);
+}
+.sel-blurb {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sel-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+.sel-stats b {
+  color: var(--text);
+}
+
+.sel-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.sel-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.act {
+  min-width: var(--tap);
+  height: var(--tap);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--stroke);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 7px;
+  position: relative;
+  transition: transform 0.1s, background 0.15s;
+  flex: 0 0 auto;
+}
+.act .ico {
+  width: 21px;
+  height: 21px;
+  color: var(--text);
+}
+.act .lbl {
+  font-size: 9.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.act .cost {
+  font-size: 9.5px;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.act:active {
+  transform: scale(0.93);
+}
+.act:disabled {
+  opacity: 0.42;
+}
+.act.primary {
+  background: rgba(233, 196, 106, 0.2);
+  border-color: rgba(233, 196, 106, 0.5);
+}
+
+/* queue chips */
+.queue {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.qitem {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.qitem .ico {
+  width: 18px;
+  height: 18px;
+  color: var(--text-dim);
+}
+.qitem i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--info);
+}
+.progress-line {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+}
+.progress-line i {
+  display: block;
+  height: 100%;
+  background: var(--info);
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------- right cluster */
+.right-rail {
+  position: absolute;
+  right: calc(8px + var(--safe-r));
+  top: 50%;
+  transform: translateY(-56%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.build-fab {
+  position: absolute;
+  overflow: hidden;
+  right: calc(8px + var(--safe-r));
+  bottom: calc(8px + var(--safe-b));
+  width: 96px;
+  height: 62px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #e9c46a, #c9973c);
+  color: #24190a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  transition: transform 0.12s, filter 0.15s;
+}
+.build-fab .ico {
+  width: 22px;
+  height: 22px;
+}
+.build-fab:active {
+  transform: scale(0.94);
+}
+.build-fab.on {
+  background: linear-gradient(160deg, #ef7d67, #c9432c);
+  color: #fff;
+}
+
+/* ------------------------------------------------------------- build menu */
+.build-menu {
+  position: absolute;
+  right: calc(8px + var(--safe-r));
+  bottom: calc(78px + var(--safe-b));
+  width: min(470px, calc(100vw - 150px - var(--safe-l) - var(--safe-r)));
+  max-height: min(74vh, 520px);
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  overscroll-behavior: contain;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.build-menu.open {
+  display: flex;
+}
+
+/* header */
+.bhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px 9px;
+  border-bottom: 1px solid var(--stroke);
+}
+.bhead .ico {
+  width: 26px;
+  height: 26px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+.bhead h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.bhead span {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+/* tabs + grid */
+.bbody {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.btabs {
+  flex: 0 0 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 6px 8px 8px;
+  border-right: 1px solid var(--stroke);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.btabs::-webkit-scrollbar {
+  display: none;
+}
+.btab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s;
+}
+.btab .ico {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.btab.on {
+  background: linear-gradient(160deg, rgba(233, 196, 106, 0.28), rgba(201, 151, 60, 0.16));
+  border-color: rgba(233, 196, 106, 0.4);
+  color: var(--text);
+}
+.bgrid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  align-content: start;
+  gap: 7px;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* detail footer */
+.bfoot {
+  border-top: 1px solid var(--stroke);
+  padding: 9px 11px 11px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.bdetail {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.bdetail-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bdetail-body h4 {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.bdetail-body p {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.bdetail-cost {
+  display: flex;
+  gap: 9px;
+  font-size: 11px;
+}
+.bdetail-cost em {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.bdetail-cost em.short {
+  color: var(--bad);
+}
+.bdetail-cost .ico {
+  width: 14px;
+  height: 14px;
+}
+.bdetail-art {
+  flex: 0 0 auto;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--stroke);
+}
+.bdetail-art .ico {
+  width: 40px;
+  height: 40px;
+}
+.bplace {
+  margin-top: 9px;
+  width: 100%;
+  height: 40px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #e9c46a, #c9973c);
+  color: #24190a;
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: 0.3px;
+  border: none;
+}
+.bplace:disabled {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-dim);
+}
+.bplace:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.bcard {
+  position: relative;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--stroke);
+  padding: 7px 7px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 78px;
+  text-align: center;
+  transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+.bcard .ico {
+  width: 26px;
+  height: 26px;
+  color: var(--gold);
+}
+.bcard .n {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.bcard .c {
+  display: flex;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.bcard .c em {
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.bcard .c em.short {
+  color: var(--bad);
+}
+.bcard .c .ico {
+  width: 12px;
+  height: 12px;
+}
+.bcard:active {
+  transform: scale(0.95);
+}
+.bcard:disabled {
+  opacity: 0.4;
+}
+.bcard.focus:not(:disabled) {
+  border-color: var(--stroke-strong);
+  background: rgba(255, 255, 255, 0.13);
+}
+.bcard.selected {
+  border-color: var(--gold);
+  background: rgba(233, 196, 106, 0.19);
+}
+
+/* On a phone the panel becomes a bottom sheet and the tabs run across it. */
+@media (max-width: 620px) {
+  .build-menu {
+    left: calc(6px + var(--safe-l));
+    right: calc(6px + var(--safe-r));
+    width: auto;
+    max-height: 68vh;
+  }
+  .bbody {
+    flex-direction: column;
+  }
+  .btabs {
+    flex: 0 0 auto;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--stroke);
+    padding: 7px 8px;
+    overflow-x: auto;
+  }
+  .btab {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 8px 11px;
+  }
+  .bdetail-body p {
+    display: none;
+  }
+
+  /* The bottom sheet owns the screen while it is open. */
+  .building .objectives,
+  .building .selection {
+    display: none;
+  }
+  .building .toasts {
+    top: calc(64px + var(--safe-t));
+  }
+}
+
+/* The onboarding tip never competes with the build sheet, at any size. */
+.building .coach {
+  display: none;
+}
+
+/* ----------------------------------------------------------------- toasts */
+.toasts {
+  position: absolute;
+  z-index: 7;
+  top: calc(58px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: max-content;
+  max-width: 76vw;
+}
+.toast {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-left: 3px solid var(--gold);
+  border-radius: 10px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  animation: toastIn 0.22s ease-out;
+  text-align: center;
+}
+.toast.bad {
+  border-left-color: var(--bad);
+}
+.toast.good {
+  border-left-color: var(--good);
+}
+.toast.info {
+  border-left-color: var(--info);
+}
+.toast.leaving {
+  animation: toastOut 0.28s ease-in forwards;
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-9px) scale(0.97);
+  }
+}
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.97);
+  }
+}
+
+/* ------------------------------------------------------------- onboarding */
+.coach {
+  position: absolute;
+  z-index: 6;
+  top: calc(106px + var(--safe-t));
+  right: calc(62px + var(--safe-r));
+  max-width: min(400px, calc(100vw - 300px));
+  background: linear-gradient(150deg, rgba(35, 47, 63, 0.95), rgba(21, 29, 40, 0.95));
+  border: 1px solid rgba(233, 196, 106, 0.42);
+  border-radius: 13px;
+  padding: 10px 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  animation: toastIn 0.3s ease-out;
+}
+.coach .ico {
+  width: 24px;
+  height: 24px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+.coach .txt {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.coach .txt b {
+  color: var(--gold);
+}
+.coach button {
+  pointer-events: auto;
+  margin-left: auto;
+  padding: 10px 12px;
+  min-width: 60px;
+  min-height: 44px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--stroke);
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.coach.hidden {
+  display: none;
+}
+
+/* ------------------------------------------------------------ select box */
+.select-box {
+  position: absolute;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  background: rgba(120, 220, 255, 0.16);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- screens */
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  padding: calc(12px + var(--safe-t)) calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
+  background: radial-gradient(120% 120% at 50% 0%, rgba(30, 44, 60, 0.86), rgba(8, 12, 18, 0.95));
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  pointer-events: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.screen.hidden {
+  display: none;
+}
+/*
+ * `margin: auto` rather than `align-items: center`. A centred flex item that
+ * outgrows its scroll container has its top pushed above the scroll origin and
+ * becomes unreachable — on a landscape phone that hid the Start button and the
+ * pause menu's Resume/Quit outright. Auto margins centre only the slack.
+ */
+.screen > * {
+  margin: auto;
+}
+
+.screen-inner {
+  width: 100%;
+  max-width: 940px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-block {
+  text-align: center;
+  line-height: 1.05;
+}
+.title-block .kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+.title-block .kicker i {
+  width: clamp(24px, 8vw, 74px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.75));
+}
+.title-block .kicker i:last-child {
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.75), transparent);
+}
+.title-block h1 {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 62px);
+  font-weight: 800;
+  letter-spacing: clamp(2px, 0.7vw, 7px);
+  background: linear-gradient(180deg, #fff6e2, #e0b96b 58%, #c08f34);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 3px 26px rgba(233, 196, 106, 0.26);
+}
+.title-block .rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 7px;
+}
+.title-block .rule i {
+  width: clamp(40px, 14vw, 150px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.6));
+}
+.title-block .rule i:last-child {
+  background: linear-gradient(90deg, rgba(233, 196, 106, 0.6), transparent);
+}
+.title-block .rule b {
+  color: var(--gold);
+  font-size: 9px;
+}
+.title-block p {
+  margin: 9px 0 0;
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+
+.faction-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  width: 100%;
+  align-items: stretch;
+}
+
+/* ---------------------------------------------------------- faction cards */
+.fcard {
+  --fc: var(--gold);
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(170deg, rgba(24, 32, 44, 0.92), rgba(12, 17, 24, 0.94));
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.16s, border-color 0.18s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.38);
+}
+.fcard-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 10px 9px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fc) 30%, transparent), transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.fcard-head .ico {
+  width: 19px;
+  height: 19px;
+  color: var(--fc);
+  flex: 0 0 auto;
+}
+.fcard h3 {
+  margin: 0;
+  font-size: clamp(13px, 2.1vw, 20px);
+  font-weight: 800;
+  letter-spacing: clamp(0.5px, 0.2vw, 2px);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* scene art */
+.fart {
+  position: relative;
+  display: block;
+  aspect-ratio: 200 / 132;
+}
+/* The scene is clipped here so the crest can hang over the edge below. */
+.fart-clip {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.fart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.fcrest {
+  position: absolute;
+  left: 50%;
+  bottom: -17px;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(170deg, #22303f, #131b25);
+  border: 1.5px solid var(--fc);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+}
+.fcrest .ico {
+  width: 18px;
+  height: 18px;
+  color: var(--fc);
+}
+
+/* bonus list */
+.fperks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px 11px 13px;
+  flex: 1 1 auto;
+}
+.fperk {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.fperk-ico {
+  flex: 0 0 auto;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fc) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fc) 45%, transparent);
+}
+.fperk-ico .ico {
+  width: 12px;
+  height: 12px;
+  color: var(--fc);
+}
+.fperk b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.fcard:active {
+  transform: scale(0.99);
+}
+.fcard.selected {
+  border-color: var(--fc);
+  transform: translateY(-4px);
+  box-shadow:
+    0 0 0 1px var(--fc) inset,
+    0 0 26px color-mix(in srgb, var(--fc) 38%, transparent),
+    0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------------------------------------ hint strip */
+.hint-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 20px;
+  margin-top: 2px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.hint-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.hint-strip .ico {
+  width: 14px;
+  height: 14px;
+  color: var(--gold);
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .faction-grid {
+    gap: 8px;
+  }
+  .fperks {
+    padding: 20px 7px 10px;
+    gap: 6px;
+  }
+  .fperk {
+    font-size: 10px;
+    gap: 6px;
+  }
+  .fperk-ico {
+    width: 17px;
+    height: 17px;
+  }
+  .fperk-ico .ico {
+    width: 10px;
+    height: 10px;
+  }
+  .hint-strip {
+    gap: 4px 12px;
+    font-size: 9.5px;
+  }
+}
+
+.big-btn {
+  min-height: 52px;
+  padding: 0 30px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #e9c46a, #c9973c);
+  color: #241905;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.9px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.42);
+  transition: transform 0.12s, filter 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.big-btn:active {
+  transform: scale(0.97);
+}
+.big-btn.ornate {
+  background: linear-gradient(180deg, #f3d688, #d9a63f 52%, #b8871f);
+  color: #2a1d05;
+  border: 1.5px solid rgba(255, 240, 200, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 10px 30px rgba(217, 166, 63, 0.3);
+  letter-spacing: 1px;
+  min-width: min(460px, 82vw);
+  justify-content: center;
+}
+.big-btn.ornate .star {
+  font-size: 15px;
+  color: #3a2a06;
+}
+.big-btn.ghost {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  border-color: var(--stroke-strong);
+  box-shadow: none;
+}
+.big-btn:disabled {
+  opacity: 0.45;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.end-title {
+  font-size: clamp(30px, 6.2vw, 56px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  margin: 0;
+  text-transform: uppercase;
+}
+.end-title.win {
+  background: linear-gradient(180deg, #fff3d0, #e9c46a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.end-title.lose {
+  background: linear-gradient(180deg, #ffd9d0, #e8563f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.end-sub {
+  color: var(--text-dim);
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 620px;
+}
+.stat {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--stroke);
+  border-radius: 11px;
+  padding: 9px 8px;
+  text-align: center;
+}
+.stat .v {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+.stat .k {
+  font-size: 10.5px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* pause / settings sheet */
+.sheet {
+  width: min(420px, 92vw);
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  /*
+   * Never taller than the screen: the research list gives up the room instead,
+   * so Resume / Restart / Main menu stay on screen without a scroll hunt.
+   */
+  max-height: 100%;
+  overflow: hidden;
+}
+.sheet > * {
+  flex: 0 0 auto;
+}
+.sheet .tech-list {
+  flex: 1 1 auto;
+  min-height: 56px;
+}
+.sheet h2 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: 0.6px;
+}
+.sheet .opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke);
+  font-size: 14px;
+}
+.toggle {
+  min-width: 60px;
+  height: 34px;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--stroke);
+  position: relative;
+  transition: background 0.2s;
+  flex: 0 0 auto;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #cfd6df;
+  transition: transform 0.18s, background 0.18s;
+}
+.toggle.on {
+  background: rgba(109, 224, 138, 0.35);
+}
+.toggle.on::after {
+  transform: translateX(26px);
+  background: var(--good);
+}
+
+.tech-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.tech-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke);
+  font-size: 12.5px;
+}
+.tech-row .ico {
+  width: 19px;
+  height: 19px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+.tech-row .info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tech-row .info b {
+  display: block;
+  font-size: 13px;
+}
+.tech-row .info span {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.tech-row .state {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--good);
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.tech-row .state.pending {
+  color: var(--text-dim);
+}
+
+/* damage flash vignette when the player is attacked */
+.hurt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(232, 86, 63, 0.6);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.hurt-vignette.on {
+  opacity: 1;
+  transition: opacity 0.1s;
+}
+
+.fps {
+  position: absolute;
+  bottom: 2px;
+  right: 118px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Very short viewports: shrink chrome so the battlefield stays visible. */
+@media (max-height: 420px) {
+  :root {
+    --tap: 46px;
+  }
+  .minimap-wrap {
+    width: 98px;
+    height: 98px;
+  }
+  .selection {
+    left: calc(116px + var(--safe-l));
+    right: calc(140px + var(--safe-r));
+    min-height: 60px;
+  }
+  .build-fab {
+    width: 88px;
+    height: 56px;
+    font-size: 12px;
+  }
+  .objectives {
+    font-size: 12px;
+    width: min(228px, 36vw);
+  }
+  .right-rail {
+    gap: 6px;
+  }
+}
+@media (max-height: 350px) {
+  .objectives {
+    display: none;
+  }
+}
+
+/*
+ * Narrow portrait phones: three faction columns leave ~100px each, which clips
+ * the civilisation's own name and breaks the traits into two-word ribbons. One
+ * column per card reads properly; the screen scrolls, and Begin Skirmish
+ * sticks to the bottom so it is never a scroll away.
+ */
+@media (max-width: 430px) and (orientation: portrait) {
+  .faction-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  /*
+   * A full-width card would need a 230px-tall scene to keep its aspect ratio,
+   * and cropping it to a letterbox slices the landmark the illustration exists
+   * to show. Set the scene beside the traits at its own ratio instead.
+   */
+  .fcard {
+    display: grid;
+    grid-template-columns: 128px 1fr;
+    grid-template-areas: 'head head' 'art perks';
+    align-items: start;
+  }
+  .fcard-head {
+    grid-area: head;
+  }
+  /*
+   * Height comes from the traits column and the scene crops at the sides, so
+   * the landmark keeps its full height instead of being sliced across.
+   * `aspect-ratio` must go, or stretching the height widens it past its column.
+   */
+  .fart {
+    grid-area: art;
+    aspect-ratio: auto;
+    align-self: stretch;
+    min-height: 84px;
+  }
+  .fart-clip {
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  /* The head already carries a crest; a second one would sit on the traits. */
+  .fcrest {
+    display: none;
+  }
+  .fperks {
+    grid-area: perks;
+    padding: 10px 12px 11px;
+    gap: 6px;
+  }
+  .title-screen .btn-row {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0 2px;
+    background: linear-gradient(180deg, rgba(10, 15, 21, 0) 0%, rgba(10, 15, 21, 0.92) 38%);
+  }
+}
+
+/*
+ * The pause sheet carries a header, three toggles, the research list and three
+ * buttons. On a small or short screen that stack is taller than the viewport,
+ * so trim the optional parts and lay the buttons out in one row.
+ */
+@media (max-width: 620px), (max-height: 560px) {
+  .sheet {
+    gap: 8px;
+    padding: 12px;
+  }
+  .sheet .end-sub {
+    display: none;
+  }
+  .sheet .opt {
+    min-height: 42px;
+    padding: 4px 10px;
+  }
+  .sheet .btn-row {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .sheet .btn-row .big-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+}
+
+/* Landscape phones: compress the title screen so it fits without scrolling. */
+@media (max-height: 560px) {
+  .screen-inner {
+    gap: 8px;
+  }
+  /*
+   * The illustrated scene is the tallest thing on a faction card and the first
+   * thing to give when the viewport is short — the crest, the name and the
+   * traits are what the choice is actually made on.
+   */
+  .fart {
+    aspect-ratio: auto;
+    height: clamp(38px, 13vh, 78px);
+  }
+  .fcrest {
+    bottom: -13px;
+    width: 30px;
+    height: 30px;
+  }
+  .fperks {
+    gap: 5px;
+    padding: 19px 9px 10px;
+  }
+  .fperk {
+    font-size: 11px;
+    line-height: 1.28;
+  }
+  .fperk-ico {
+    width: 18px;
+    height: 18px;
+  }
+  .hint-strip {
+    display: none;
+  }
+}
+
+@media (max-height: 430px) {
+  .screen-inner {
+    gap: 6px;
+  }
+  .title-block h1 {
+    font-size: clamp(24px, 4.4vw, 34px);
+  }
+  /* The tagline is the one line this screen can do without. */
+  .title-block p {
+    display: none;
+  }
+  .fart {
+    height: clamp(30px, 10vh, 52px);
+  }
+  .title-block .kicker {
+    font-size: 10px;
+    letter-spacing: 3px;
+  }
+  .fcard {
+    padding: 8px 9px;
+    gap: 4px;
+    border-radius: 12px;
+  }
+  .fcard h3 {
+    font-size: 17px;
+  }
+  .fcard .row {
+    font-size: 10.8px;
+    line-height: 1.3;
+  }
+  .big-btn {
+    min-height: 48px;
+    font-size: 15px;
+    padding: 0 22px;
+  }
+  .screen .end-sub {
+    font-size: 11.5px;
+  }
+  .stat-grid {
+    gap: 6px;
+  }
+  .stat {
+    padding: 6px 6px;
+  }
+  .stat .v {
+    font-size: 17px;
+  }
+}
+
+/* ------------------------------------------------------- keyboard controls */
+/* Hotkey badges stay hidden until a keyboard-capable device shows up. */
+.hk {
+  display: none;
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--stroke);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 12px;
+  text-align: center;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+.has-keyboard .hk {
+  display: block;
+}
+.build-fab .hk {
+  background: rgba(0, 0, 0, 0.32);
+  border-color: rgba(0, 0, 0, 0.25);
+  color: #3a2a08;
+}
+.desktop-only {
+  display: none;
+}
+.has-keyboard .desktop-only {
+  display: flex;
+}
+.right-rail .desktop-only {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-dim);
+  align-items: center;
+  justify-content: center;
+}
+
+/* control-group strip, sitting above the minimap */
+.groups {
+  position: absolute;
+  left: calc(8px + var(--safe-l));
+  bottom: calc(168px + var(--safe-b));
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  max-width: 150px;
+}
+.groups .group {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  font-size: 10px;
+  line-height: 14px;
+}
+.groups .group b {
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 800;
+}
+.groups .group span {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* controls reference */
+.help {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 18, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+  padding: 16px;
+}
+.help.hidden {
+  display: none;
+}
+.help-inner {
+  width: min(880px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius);
+  padding: 18px 20px 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.help-inner h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.help-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px 26px;
+}
+.help-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.help-row kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.help-inner > button {
+  margin-top: 14px;
+  width: 100%;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ phones */
+/*
+ * The HUD is laid out for a desktop first; on a phone every cluster has to
+ * shrink or move so that nothing runs off the edge and nothing lands on top of
+ * anything else. Measured against 360x640, 390x844 and landscape 740x360.
+ */
+@media (max-width: 620px) {
+  :root {
+    --tap: 44px;
+  }
+
+  /*
+   * Five counters will not fit on one phone-width line beside the age plate --
+   * they were being sliced mid-number -- so the strip wraps onto two rows and
+   * every value stays legible. Three chips per row is the worst case, which is
+   * why the topbar below is sized for exactly two.
+   */
+  .res-strip {
+    gap: 0;
+    padding: 5px 8px;
+    border-radius: 13px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 2px;
+    overflow: hidden;
+  }
+  .res {
+    gap: 4px;
+    padding: 1px 5px;
+    font-size: 13px;
+  }
+  .res .ico {
+    width: 16px;
+    height: 16px;
+  }
+  .res .val {
+    min-width: 0;
+  }
+  .res-sep {
+    margin: 2px 5px;
+  }
+
+  /* Age plate: keep the medallion and the menu, drop the wordmark. */
+  .age-badge {
+    gap: 7px;
+    padding: 4px 9px 4px 5px;
+    border-radius: 13px;
+  }
+  .age-medal {
+    width: 30px;
+    height: 30px;
+  }
+  .age-medal b {
+    font-size: 12px;
+  }
+  .age-badge .age-name {
+    display: none;
+  }
+  .age-badge .clock {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .menu-btn {
+    border-radius: 13px;
+  }
+
+  /* Objectives sit under the two-row resource strip and take less room. */
+  .objectives {
+    top: calc(64px + var(--safe-t));
+    width: min(210px, 54vw);
+    padding: 7px 10px 8px;
+    font-size: 11.5px;
+    border-radius: 12px;
+  }
+  .objectives h4 {
+    font-size: 10px;
+    letter-spacing: 1.4px;
+  }
+  .obj-rule {
+    margin: 3px 0 4px;
+  }
+  .obj-item {
+    padding: 2px 0;
+  }
+
+  /* Minimap: smaller, and its corner button becomes a real tap target. */
+  .minimap-wrap {
+    width: 108px;
+    height: 108px;
+    border-radius: 12px;
+    padding: 5px;
+  }
+  .mm-expand {
+    top: 8px;
+    right: 8px;
+    width: 36px;
+    height: 36px;
+  }
+  .mm-expand .ico {
+    width: 18px;
+    height: 18px;
+  }
+  .minimap-wrap .compass {
+    display: none;
+  }
+
+  /* Control groups ride above the shorter minimap. */
+  .groups {
+    bottom: calc(122px + var(--safe-b));
+    max-width: 108px;
+  }
+
+  /*
+   * Wedged between the minimap and the build button, the selection panel had
+   * ~24px left for text and clipped the unit's own name. Give it its own row
+   * above the bottom controls instead, stopping short of the right rail.
+   */
+  .selection {
+    left: calc(8px + var(--safe-l));
+    right: calc(60px + var(--safe-r));
+    bottom: calc(128px + var(--safe-b));
+    max-height: 118px;
+  }
+
+  .right-rail {
+    gap: 6px;
+  }
+  .icon-btn .ico {
+    width: 21px;
+    height: 21px;
+  }
+
+  /*
+   * Three floating cards want the same corner on a phone. Give each its own
+   * band: objectives at the top left (height-capped so it cannot creep down),
+   * toasts in the strip below it, and the coach as a full-width footer sitting
+   * above the bottom controls. Right-anchoring the coach on a 390px screen left
+   * it 90px wide and 233px tall — a column of single words.
+   */
+  .objectives {
+    max-height: 30vh;
+    overflow: hidden;
+  }
+  .toasts {
+    top: calc(194px + var(--safe-t));
+    max-width: 84vw;
+  }
+  .coach {
+    top: auto;
+    bottom: calc(252px + var(--safe-b)); /* above the selection row */
+    left: calc(8px + var(--safe-l));
+    right: calc(60px + var(--safe-r)); /* clears the right rail's column */
+    max-width: none;
+  }
+
+  /* Button captions are read at arm's length on a phone. */
+  .act .lbl,
+  .act .cost {
+    font-size: 10.5px;
+  }
+}
+
+/*
+ * Landscape phones are wide but very short: the right rail runs from the
+ * middle outwards and collides with the age plate, and there is no vertical
+ * room for a tall minimap.
+ */
+@media (max-height: 460px) and (orientation: landscape) {
+  .right-rail {
+    top: auto;
+    bottom: calc(8px + var(--safe-b));
+    transform: none;
+    flex-direction: row;
+  }
+  .minimap-wrap {
+    width: 96px;
+    height: 96px;
+  }
+  .groups {
+    bottom: calc(110px + var(--safe-b));
+    max-width: 96px;
+  }
+  .objectives {
+    top: calc(52px + var(--safe-t));
+    max-height: 38vh;
+    overflow: hidden;
+  }
+  .selection {
+    left: calc(112px + var(--safe-l));
+  }
+  /* Keep the rail clear of the build button in the same corner. */
+  .build-fab {
+    bottom: calc(62px + var(--safe-b));
+  }
+  .selection {
+    right: calc(268px + var(--safe-r));
+    /* Tall enough for a full 44px action row; at 104px the buttons were sliced. */
+    max-height: 122px;
+  }
+  .toasts {
+    top: calc(52px + var(--safe-t));
+  }
+  .act .lbl,
+  .act .cost {
+    font-size: 10.5px;
+  }
+}
