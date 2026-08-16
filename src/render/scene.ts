@@ -36,6 +36,8 @@ import {
 } from './effects';
 import { C } from './palette';
 import { carryModel, chestModel, clearPropCache, decorationModel, nodeModel, scaffoldModel } from './props';
+import { CharacterSystem, getPalmAsset, type CharacterHandle } from './characters';
+import type { FactionId, Unit } from '../sim/types';
 import { buildTerrain, type Polyline, type TerrainBuild } from './terrain';
 import { clearUnitCache, unitModel } from './units';
 import { RingGeometry, MeshBasicMaterial, DoubleSide } from 'three';
@@ -117,6 +119,8 @@ export class SceneRenderer {
   private teamDiscs!: InstancePool;
   private chestPool: InstancePool | null = null;
   private chestShown: boolean[] = [];
+  /** Skinned GLB villagers; falls back to the procedural pool until loaded. */
+  readonly characters = new CharacterSystem();
 
   private unitVisuals = new Map<number, UnitVisual>();
   private buildingVisuals = new Map<number, BuildingVisual>();
@@ -227,8 +231,9 @@ export class SceneRenderer {
       arr.push(d);
     }
     for (const [kind, list] of byKind) {
-      const geo = decorationModel(kind as never);
-      const mat = this.solidMaterial();
+      const palm = kind === 'palm' ? getPalmAsset() : null;
+      const geo = palm ? palm.geo : decorationModel(kind as never);
+      const mat = palm ? palm.mat : this.solidMaterial();
       const pool = new InstancePool(geo, mat, list.length, this.quality.shadows && kind !== 'grass');
       for (let i = 0; i < list.length; i++) {
         const d = list[i];
@@ -324,8 +329,10 @@ export class SceneRenderer {
     const key = `node-${type}-${variant}`;
     let pool = this.nodePools.get(key);
     if (!pool) {
-      const geo = nodeModel(type as never, variant);
-      pool = new InstancePool(geo, this.solidMaterial(), 320, this.quality.shadows && type !== 'fish');
+      const palm = type === 'tree' && variant <= 1 ? getPalmAsset() : null;
+      const geo = palm ? palm.geo : nodeModel(type as never, variant);
+      const mat = palm ? palm.mat : this.solidMaterial();
+      pool = new InstancePool(geo, mat, 320, this.quality.shadows && type !== 'fish');
       this.nodePools.set(key, pool);
       this.scene.add(pool.mesh);
     }
@@ -486,6 +493,7 @@ export class SceneRenderer {
     this.rings.end();
     this.bars.end();
 
+    this.characters.update(dt);
     this.projectiles.sync(this.game.projectiles, dt);
     this.particles.update(dt);
     this.pulses.update(dt);
@@ -530,6 +538,8 @@ export class SceneRenderer {
       if (u.owner !== 0 && !game.isEntityVisible(u)) {
         pool.hide(vis.slot);
         pool.flush(false);
+        const ch = this.characters.peek(u.id);
+        if (ch) ch.root.visible = false;
         if (vis.carrySlot >= 0 && vis.carryKey) {
           this.carryPool(vis.carryKey).free(vis.carrySlot);
           vis.carrySlot = -1;
@@ -631,24 +641,41 @@ export class SceneRenderer {
         scale *= 1 - smoothstep(0.7, 1, k) * 0.35;
       }
 
+      // Villagers become skinned GLB characters once the models are in; the
+      // procedural instanced figure carries them until then.
+      const char =
+        u.type === 'villager' && u.owner < 2 && this.characters.ready
+          ? this.characters.obtain(u.id, faction as FactionId, this.scene)
+          : null;
+
       _v.set(x, y + bob, z);
       _q.setFromAxisAngle(YAXIS, angle);
-      const tiltQ = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -(lean + tilt));
-      const rollQ = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), roll);
-      _q.multiply(tiltQ).multiply(rollQ);
-      _m.compose(_v, _q, new Vector3(scale, scale, scale));
-      pool.setMatrix(vis.slot, _m);
-
-      // Damage flash / dead desaturation.
-      if (u.hurtTimer > 0) {
-        const k = clamp(u.hurtTimer / 0.28, 0, 1);
-        _color.setRGB(1 + k * 1.6, 1 - k * 0.55, 1 - k * 0.55);
-      } else if (u.state === 'dead') {
-        _color.setRGB(0.72, 0.68, 0.66);
+      if (char) {
+        pool.hide(vis.slot);
+        char.root.visible = true;
+        char.root.position.set(x, y, z);
+        char.root.rotation.y = angle;
+        char.root.scale.setScalar(Math.max(0.001, scale));
+        this.driveCharacter(char, u, moving);
+        this.characters.flash(char, u.hurtTimer > 0 ? clamp(u.hurtTimer / 0.28, 0, 1) : 0);
       } else {
-        _color.setRGB(1, 1, 1);
+        const tiltQ = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -(lean + tilt));
+        const rollQ = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), roll);
+        _q.multiply(tiltQ).multiply(rollQ);
+        _m.compose(_v, _q, new Vector3(scale, scale, scale));
+        pool.setMatrix(vis.slot, _m);
+
+        // Damage flash / dead desaturation.
+        if (u.hurtTimer > 0) {
+          const k = clamp(u.hurtTimer / 0.28, 0, 1);
+          _color.setRGB(1 + k * 1.6, 1 - k * 0.55, 1 - k * 0.55);
+        } else if (u.state === 'dead') {
+          _color.setRGB(0.72, 0.68, 0.66);
+        } else {
+          _color.setRGB(1, 1, 1);
+        }
+        pool.setColor(vis.slot, _color);
       }
-      pool.setColor(vis.slot, _color);
 
       // Team disc. The wilds carry none — a wolf is nobody's soldier.
       if (u.state !== 'dead' && u.owner < 2 && this.teamDiscCount < this.teamDiscs.capacity) {
@@ -711,8 +738,42 @@ export class SceneRenderer {
       const [f, t] = vis.key.split('|');
       this.unitPool(f, t).free(vis.slot);
       this.unitVisuals.delete(id);
+      this.characters.release(id);
     }
     for (const pool of this.unitPools.values()) pool.flush(true);
+  }
+
+  /** Chooses and paces the animation clip a skinned villager should play. */
+  private driveCharacter(char: CharacterHandle, u: Unit, moving: number): void {
+    const c = this.characters;
+    if (u.state === 'dead') {
+      // The sim removes the body after 1.4s; pace the 2.2s clip to fit.
+      c.play(char, 'dying_backwards', 1.65, true);
+      return;
+    }
+    const speed = Math.hypot(u.vx, u.vz);
+    if (moving > 0.35) {
+      if (speed > 4.1) {
+        c.play(char, 'Running', clamp(speed / 4.6, 0.8, 1.5));
+      } else {
+        c.play(char, 'Walking', clamp(speed / 3.0, 0.6, 1.6));
+      }
+      return;
+    }
+    if (u.state === 'attack' || u.swingTimer > 0) {
+      // One full swing per attack cooldown.
+      c.play(char, 'Attack', 2.8 / Math.max(0.7, u.def.attackSpeed));
+      return;
+    }
+    if (u.state === 'build') {
+      c.play(char, 'Heavy_Hammer_Swing', 1.15);
+      return;
+    }
+    if (u.state === 'gather') {
+      c.play(char, 'Collect_Object', 1.7);
+      return;
+    }
+    c.play(char, u.id % 2 === 0 ? 'Idle_02' : 'Idle_03', 1);
   }
 
   /** ---------------------------------------------------------------------
@@ -1180,6 +1241,7 @@ export class SceneRenderer {
       this.staticGroup.remove(this.terrain.water);
       this.terrain.dispose();
     }
+    this.characters.releaseAll();
     this.unitVisuals.clear();
     this.buildingVisuals.clear();
     this.nodeVisuals.clear();
