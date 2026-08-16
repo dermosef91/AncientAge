@@ -362,6 +362,9 @@ export class Hud {
 
     this.buildFab.classList.toggle('on', buildOpen || !!placing);
     this.buildMenuEl.classList.toggle('open', buildOpen);
+    // On a phone the build menu is a bottom sheet that covers most of the HUD;
+    // the cards it would sit on top of stand down while it is up.
+    this.root.classList.toggle('building', buildOpen);
     if (buildOpen) this.renderBuildMenu(game, placing);
 
     this.renderSelection(game, selection);

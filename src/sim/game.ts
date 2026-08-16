@@ -572,6 +572,7 @@ export class Game {
     let any = false;
     for (const u of units) {
       if (!u.def.canGather) continue;
+      if (!this.nodeBelongsTo(node, u.owner)) continue;
       const domain = this.domainOf(u);
       const nodeIsWater = node.type === 'fish';
       if (nodeIsWater !== (domain === 'water')) continue;
@@ -1088,11 +1089,25 @@ export class Game {
    * ------------------------------------------------------------------- */
 
   /**
-   * How close a worker must get before it can harvest. Trees and ore occupy a
-   * blocked tile, so the worker stands in the *next* tile over - the reach has
-   * to clear a whole tile or gathering silently never starts.
+   * How close a worker must get before it can harvest. Nodes standing on
+   * impassable ground need a longer arm, because the worker cannot walk onto
+   * them and has to reach in from outside.
+   *
+   * A farm is the extreme case: its harvest point is the centre of a 3x3
+   * footprint whose tiles are all occupied, so a worker approaching a corner
+   * stands 4.24 away while one at an edge midpoint stands 3.0 away. A reach
+   * sized off the node radius covers only the edge, and pathing routes workers
+   * to the corner as often as not — which is why farms barely yielded.
    */
   private gatherReach(u: Unit, node: ResourceNode): number {
+    // A farm's arm is measured off the footprint it sits on rather than off the
+    // node radius, so it keeps covering the corners if the building ever grows.
+    if (node.ownerBuildingId) {
+      const b = this.entity(node.ownerBuildingId);
+      const size = b && b.kind === 'building' ? b.size : 3;
+      const half = (size * TILE) / 2;
+      return Math.SQRT2 * half + u.def.radius + 0.35;
+    }
     const blocking = node.type === 'tree' || node.type === 'gold' || node.type === 'stone';
     return u.def.radius + node.radius + (blocking ? TILE * 0.9 : 0.6);
   }
@@ -1151,9 +1166,13 @@ export class Game {
     node.depleted = true;
     node.amount = 0;
     node.fadeTimer = 1.1;
-    const gx = this.grid.tileX(node.x);
-    const gz = this.grid.tileZ(node.z);
-    if (this.grid.inBounds(gx, gz)) this.grid.blocked[this.grid.idx(gx, gz)] = 0;
+    // Only natural nodes ever marked themselves blocked; a farm's tiles are
+    // `occupied` by its building and are released when that building falls.
+    if (!node.ownerBuildingId) {
+      const gx = this.grid.tileX(node.x);
+      const gz = this.grid.tileZ(node.z);
+      if (this.grid.inBounds(gx, gz)) this.grid.blocked[this.grid.idx(gx, gz)] = 0;
+    }
     this.events.push({ type: 'node-depleted', node });
     if (node.ownerBuildingId) {
       const b = this.entity(node.ownerBuildingId);
@@ -1232,6 +1251,7 @@ export class Game {
       const isFish = n.type === 'fish';
       if (isFish !== naval) continue;
       if (preferred && n.resource !== preferred) continue;
+      if (!this.nodeBelongsTo(n, u.owner)) continue;
       const d = Math.sqrt(dist2(u.x, u.z, n.x, n.z));
       if (d > 55) continue;
       const crowd = Math.max(0, n.workers - NODE_WORKER_LIMIT[n.type]) * 14;
@@ -1251,6 +1271,7 @@ export class Game {
     for (const n of this.nodes) {
       if (n.depleted || n.resource !== res) continue;
       if (n.type === 'fish') continue;
+      if (!this.nodeBelongsTo(n, pi)) continue;
       const d = Math.sqrt(dist2(x, z, n.x, n.z));
       const crowd = Math.max(0, n.workers - NODE_WORKER_LIMIT[n.type]) * 16;
       const score = d + crowd;
@@ -1259,7 +1280,6 @@ export class Game {
         best = n;
       }
     }
-    void pi;
     return best;
   }
 
@@ -1470,6 +1490,7 @@ export class Game {
         n.depleted = true;
         n.amount = 0;
         n.fadeTimer = 0.6;
+        this.events.push({ type: 'node-depleted', node: n });
       }
     }
     // Refund queued production.
@@ -1769,6 +1790,28 @@ export class Game {
       }
     }
     return best;
+  }
+
+  /**
+   * A farm's harvest point belongs to whoever raised the farm. Natural nodes
+   * belong to nobody and are fair game.
+   */
+  nodeBelongsTo(n: ResourceNode, pi: number): boolean {
+    if (!n.ownerBuildingId) return true;
+    const b = this.entity(n.ownerBuildingId);
+    return !b || b.kind !== 'building' || b.owner === pi;
+  }
+
+  /**
+   * The harvest point a building carries, if it still has one. A farm is both a
+   * building and a resource node standing on the same tiles, so an order aimed
+   * at the building has to be able to find the node behind it.
+   */
+  nodeOfBuilding(buildingId: number): ResourceNode | null {
+    for (const n of this.nodes) {
+      if (n.ownerBuildingId === buildingId && !n.depleted) return n;
+    }
+    return null;
   }
 
   pickNode(x: number, z: number, maxDist = 2.2): ResourceNode | null {
